@@ -2,30 +2,53 @@
 1.9.20 will be the last version of the 1.9.x family.  
 Next TestLink version will 2.x with a new UX based on the Dashio - Bootstrap Admin Template (https://templatemag.com/dashio-bootstrap-admin-template/)
 
+# TestLink 1.9.20 Raijin - Enhanced Fork with MCP Support
 
+## 🚀 Key Enhancements in This Fork
+
+This is an enhanced fork of TestLink 1.9.20 with critical improvements for modern development workflows:
+
+### 🔧 **PostgreSQL Database Support**
+- **Migrated from MySQL to PostgreSQL** for better performance and modern database features
+- Updated `docker-compose.yml` to use PostgreSQL 9.6
+- Improved database compatibility and reliability
+
+### 🔌 **Model Context Protocol (MCP) Integration**
+- **Fixed and enhanced XML-RPC API** for seamless MCP server integration
+- **Compatible with [TestLink MCP Server](https://github.com/dogkeeper886/testlink-mcp)**
+- Enables AI-powered test case management through Claude Code and other MCP-compatible tools
+- **Critical for modern test automation workflows**
+
+### 🛠 **XML-RPC API Improvements**
+- Resolved XML-RPC compatibility issues that prevented MCP integration
+- Enhanced API stability and error handling
+- Improved support for external tool integration
+
+---
 
 # TestLink 1.9.20 Raijin - Read me
 
 ## Contents
  1. [Introduction](#1-introduction)
- 2. [Release notes / Critical Configuration Notes](#2-release-notes--critical-configuration-notes)
- 3. [System Requirements](#3-system-requirements---server)
- 4. [Installation & SECURITY](#4-installation--security)
- 5. [Upgrade and Migration](#5-upgrade-and-migration)
- 6. [TestLink Team](#6-testlink-team)
- 7. [Bug Reports and Feedback](#7-bug-reports-and-feedback)
- 8. [Supporting our work](#8-supporting-our-work)
- 9. [Regarding forum usage](#9-regarding-forum-usage-wwwtestlinkorg) www.testlink.org
-10. [Changes](#10-changes)
-11. [Testlink & FreeTest](#11-testlink--freetest)
-12. [Security](#12-security)
-13. [JIRA DB interface changes](#13-jira-db-interface-changes)
-14. [People/Companies supporting TestLink](#14-peoplecompanies-supporting-testlink)
-15. [Use forum.testlink.org](#15-use-forumtestlinkorg)
-16. [User cries: I WANT HELP !!!](#16-user-cries-i-want-help-)
-17. [Use Mantis documentation](#17-use-mantis-documentation)
-18. [Link to GITORIOUS COMMITS](#18-link-to-gitorious-commits)
-19. [Running Testlink using Docker](./docker/README.md)
+ 2. [MCP Integration & AI-Powered Testing](#2-mcp-integration--ai-powered-testing)
+ 3. [Release notes / Critical Configuration Notes](#3-release-notes--critical-configuration-notes)
+ 4. [System Requirements](#4-system-requirements---server)
+ 5. [Installation & SECURITY](#5-installation--security)
+ 6. [Upgrade and Migration](#6-upgrade-and-migration)
+ 7. [TestLink Team](#7-testlink-team)
+ 8. [Bug Reports and Feedback](#8-bug-reports-and-feedback)
+ 9. [Supporting our work](#9-supporting-our-work)
+10. [Regarding forum usage](#10-regarding-forum-usage-wwwtestlinkorg) www.testlink.org
+11. [Changes](#11-changes)
+12. [Testlink & FreeTest](#12-testlink--freetest)
+13. [Security](#13-security)
+14. [JIRA DB interface changes](#14-jira-db-interface-changes)
+15. [People/Companies supporting TestLink](#15-peoplecompanies-supporting-testlink)
+16. [Use forum.testlink.org](#16-use-forumtestlinkorg)
+17. [User cries: I WANT HELP !!!](#17-user-cries-i-want-help-)
+18. [Use Mantis documentation](#18-use-mantis-documentation)
+19. [Link to GITORIOUS COMMITS](#19-link-to-gitorious-commits)
+20. [Running Testlink using Docker](./docker/README.md)
 
 ## 1. Introduction
 
@@ -40,6 +63,8 @@ behind TestLink is freely available for download via [SourceForge][sou]
 or [GitHub][hub]. If you are interested in contributing to the TestLink
 effort feel free to contact us. There is no hidden fee - 100% free for
 using!
+
+**This Enhanced Fork**: This repository contains an enhanced fork of TestLink 1.9.20 specifically designed to support modern AI-powered testing workflows through Model Context Protocol (MCP) integration. It includes critical XML-RPC API fixes and PostgreSQL database support that are essential for MCP compatibility.
 
 In an ideal world, testing would be a pretty straightforward process.
 A test team takes the product requirements, writes a test specification
@@ -70,7 +95,53 @@ platforms and staff. You allocate tests to staff who carry them out and
 record the results. A wide variety of reports provide information on what
 has been done and what still needs to be done.
 
-## 2. Release notes / CRITICAL Configuration Notes
+## 2. MCP Integration & AI-Powered Testing
+
+### 🤖 **Model Context Protocol (MCP) Support**
+
+This enhanced fork of TestLink 1.9.20 includes **critical XML-RPC API fixes** that enable seamless integration with modern AI-powered testing tools through the Model Context Protocol (MCP).
+
+#### **Key Benefits:**
+- **AI-Powered Test Management**: Integrate with Claude Code and other MCP-compatible AI tools
+- **Automated Test Case Generation**: Use AI to create, update, and manage test cases
+- **Enhanced Workflow Integration**: Connect TestLink with modern development and testing pipelines
+- **Improved API Reliability**: Fixed XML-RPC compatibility issues for stable MCP integration
+
+#### **TestLink MCP Server Integration**
+
+This fork is specifically designed to work with the [**TestLink MCP Server**](https://github.com/dogkeeper886/testlink-mcp), which provides:
+
+- **22 MCP Tools** for comprehensive test management
+- **Test Case Management**: Create, read, update, delete test cases
+- **Test Suite Operations**: Manage test suites and organize test cases  
+- **Test Plan Management**: Create test plans, assign test cases, manage builds
+- **Test Execution**: Record and track test execution results
+- **Requirement Management**: Read requirements and link to test cases
+
+#### **Quick MCP Setup**
+
+1. **Start this enhanced TestLink instance** (see Installation section)
+2. **Install the TestLink MCP Server**:
+   ```bash
+   # For Claude Code
+   claude mcp add testlink -- docker run --rm -i \
+     -e TESTLINK_URL=http://your-testlink-server.com/testlink \
+     -e TESTLINK_API_KEY=your_api_key_here \
+     dogkeeper886/testlink-mcp:latest
+   ```
+
+3. **Generate API Key** in TestLink:
+   - Login to TestLink
+   - Go to "My Settings" 
+   - Click "Generate API Key"
+
+#### **Why This Fork is Critical**
+
+The official TestLink 1.9.20 has XML-RPC API compatibility issues that prevent MCP integration. This fork resolves these issues, making it the **only version** that supports modern AI-powered testing workflows through MCP.
+
+**Without this fork, MCP integration with TestLink is not possible.**
+
+## 3. Release notes / CRITICAL Configuration Notes
 
 This release contains bugfixes and enhancement for 1.9.19
 See CHANGELOG file for detailed list of issues fixed.
@@ -163,6 +234,7 @@ Server environment should consist of:
 - PHP IMPORTANTE NOTICE: next TestLink Version will require minimum PHP 7.3.x
 -       
 - DBMS
+  - **PostgreSQL 9.6+ (Recommended for this fork)**
   - MySQL 5.7.x
     - The `log_bin_trust_function_creators` option must be enabled.
   - MariaDB 10.1.x
@@ -181,6 +253,8 @@ ATTENTION: we have not enough resources to test on all kind of browsers.
 
 ### With containers
 use [README.containers.md](README.containers.md)
+
+**Note**: This fork uses **PostgreSQL** instead of MySQL. The `docker-compose.yml` has been updated to use PostgreSQL 9.6 for better performance and modern database features.
 
 ### Without containers
 
@@ -568,7 +642,14 @@ PLEASE: read these short hints before you write a topic:
 
 ## 10. Changes (Just a glance)
 
-### 1.9.20
+### This Enhanced Fork (Based on 1.9.20)
+  - **PostgreSQL Database Support**: Migrated from MySQL to PostgreSQL 9.6
+  - **MCP Integration**: Fixed XML-RPC API for Model Context Protocol compatibility
+  - **AI-Powered Testing**: Enables integration with Claude Code and other MCP tools
+  - **Enhanced API Reliability**: Resolved XML-RPC compatibility issues
+  - **Modern Development Workflow**: Support for contemporary testing automation
+
+### 1.9.20 (Original)
   - DB Schema changes new views, tables.
   - Platforms can be used during Test Case Design
   - Security Fixes
