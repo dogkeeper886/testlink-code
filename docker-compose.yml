@@ -3,26 +3,24 @@ networks:
     name: testlink
 services:
   db:
-    image: mysql:8.3.0
+    image: postgres:9.6
     networks:
     - testlink
     restart: unless-stopped
-    user: mysql
     environment:
-    - MYSQL_USER=teste
-    - MYSQL_PASSWORD=teste
-    - MYSQL_ROOT_PASSWORD=teste
-    - MYSQL_DATABASE=testlink
+    - POSTGRES_USER=teste
+    - POSTGRES_PASSWORD=teste
+    - POSTGRES_DB=testlink
     volumes:
-    - mysql:/var/lib/mysql
+    - postgres:/var/lib/postgresql/data
 
   maildev:
     image: maildev/maildev:latest
     networks:
     - testlink
     ports:
-    - 1080:1080
-    - 1025:1025
+    - "0.0.0.0:1080:1080"
+    - "0.0.0.0:1025:1025"
     restart: unless-stopped
     environment:
     - NODE_TLS_REJECT_UNAUTHORIZED=0
@@ -38,7 +36,7 @@ services:
     networks:
     - testlink
     ports:
-    - 8090:80
+    - "0.0.0.0:8090:80"
     volumes:
       - ./logs:/var/testlink/logs:Z
       - ./upload_area:/var/testlink/upload_area:Z
@@ -55,4 +53,4 @@ services:
     command: ['/bin/bash', '-c', 'cd ./docs/db_sample && ./restore_sample.sh']
 
 volumes:
-  mysql:
+  postgres:
