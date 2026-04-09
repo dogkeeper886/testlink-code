@@ -65,6 +65,28 @@ steps:
     expectPatterns:
       - "CI Smoke Test"
 
+  - name: Delete test case via API
+    command: |
+      curl -sf -X POST http://localhost:8090/lib/api/xmlrpc/v1/xmlrpc.php \
+        -H "Content-Type: text/xml" \
+        -d '<?xml version="1.0"?><methodCall><methodName>tl.deleteTestCase</methodName><params><param><value><struct>
+          <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+          <member><name>testcaseexternalid</name><value><string>CIT-1</string></value></member>
+        </struct></value></param></params></methodCall>'
+    expectPatterns:
+      - "Success|status.*1|true"
+
+  - name: Delete test suite via API
+    command: |
+      curl -sf -X POST http://localhost:8090/lib/api/xmlrpc/v1/xmlrpc.php \
+        -H "Content-Type: text/xml" \
+        -d '<?xml version="1.0"?><methodCall><methodName>tl.deleteTestSuite</methodName><params><param><value><struct>
+          <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+          <member><name>testsuiteid</name><value><int>2</int></value></member>
+        </struct></value></param></params></methodCall>'
+    expectPatterns:
+      - "Success|status.*1|true"
+
   - name: Tear down CI environment
     command: bash ./cicd/scripts/ci-down.sh
     timeout: 30000
@@ -75,4 +97,6 @@ criteria: |
   - Create a test suite under the project
   - Create a test case in the suite
   - Retrieve and verify the test case
+  - Delete the test case via tl.deleteTestCase
+  - Delete the test suite via tl.deleteTestSuite
   - Clean up the environment
