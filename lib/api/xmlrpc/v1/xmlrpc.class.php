@@ -8191,6 +8191,104 @@ class TestlinkXMLRPCServer extends IXR_Server {
     }
 
     /**
+     * deleteTestCase
+     *
+     * Delete a test case identified by internal ID or external ID.
+     *
+     * @param struct $args
+     * @param string $args["devKey"]
+     * @param int $args["testcaseid"] - optional, internal ID
+     * @param string $args["testcaseexternalid"] - optional, external ID (e.g. "CIT-1")
+     *
+     * @return mixed $resultInfo
+     *        [status] => true/false of success
+     *        [id] => test case id
+     *        [message] => optional message for error message string
+     * @access public
+     */
+    public function deleteTestCase($args) {
+        $resultInfo = array();
+        $operation = __FUNCTION__;
+        $msg_prefix = "({$operation}) - ";
+
+        $this->_setArgs( $args );
+        $resultInfo[0]["status"] = false;
+
+        $checkFunctions = array(
+                'authenticate',
+                'checkTestCaseIdentity'
+        );
+        $status_ok = $this->_runChecks( $checkFunctions, $msg_prefix );
+
+        if($status_ok) {
+            $status_ok = $this->userHasRight( "mgt_modify_tc", self::CHECK_PUBLIC_PRIVATE_ATTR );
+            if(!$status_ok) {
+                $this->errors[] = new IXR_Error( INSUFFICIENT_RIGHTS, $msg_prefix . INSUFFICIENT_RIGHTS_STR );
+            }
+        }
+
+        if($status_ok) {
+            $tcaseID = $this->args[self::$testCaseIDParamName];
+            $this->tcaseMgr->delete( $tcaseID );
+            $resultInfo[0]["status"] = true;
+            $resultInfo[0]["id"] = $tcaseID;
+            $resultInfo[0]["message"] = GENERAL_SUCCESS_STR;
+            $resultInfo[0]["operation"] = $operation;
+        }
+
+        return $status_ok ? $resultInfo : $this->errors;
+    }
+
+    /**
+     * deleteTestSuite
+     *
+     * Delete a test suite and all its contents (child test cases and sub-suites).
+     *
+     * @param struct $args
+     * @param string $args["devKey"]
+     * @param int $args["testsuiteid"]
+     *
+     * @return mixed $resultInfo
+     *        [status] => true/false of success
+     *        [id] => test suite id
+     *        [message] => optional message for error message string
+     * @access public
+     */
+    public function deleteTestSuite($args) {
+        $resultInfo = array();
+        $operation = __FUNCTION__;
+        $msg_prefix = "({$operation}) - ";
+
+        $this->_setArgs( $args );
+        $resultInfo[0]["status"] = false;
+
+        $checkFunctions = array(
+                'authenticate',
+                'checkTestSuiteID'
+        );
+        $status_ok = $this->_runChecks( $checkFunctions, $msg_prefix );
+
+        if($status_ok) {
+            $status_ok = $this->userHasRight( "mgt_modify_tc", self::CHECK_PUBLIC_PRIVATE_ATTR );
+            if(!$status_ok) {
+                $this->errors[] = new IXR_Error( INSUFFICIENT_RIGHTS, $msg_prefix . INSUFFICIENT_RIGHTS_STR );
+            }
+        }
+
+        if($status_ok) {
+            $tsuiteID = $this->args[self::$testSuiteIDParamName];
+            $tsuiteMgr = new testsuite( $this->dbObj );
+            $tsuiteMgr->delete_deep( $tsuiteID );
+            $resultInfo[0]["status"] = true;
+            $resultInfo[0]["id"] = $tsuiteID;
+            $resultInfo[0]["message"] = GENERAL_SUCCESS_STR;
+            $resultInfo[0]["operation"] = $operation;
+        }
+
+        return $status_ok ? $resultInfo : $this->errors;
+    }
+
+    /**
      * Update value of Custom Field with scope='design'
      * for a given Test Suite
      *
@@ -9119,9 +9217,11 @@ class TestlinkXMLRPCServer extends IXR_Server {
                 'tl.createTestPlan' => 'this:createTestPlan',
                 'tl.createTestProject' => 'this:createTestProject',
                 'tl.createTestSuite' => 'this:createTestSuite',
+                'tl.deleteTestCase' => 'this:deleteTestCase',
                 'tl.deleteTestCaseSteps' => 'this:deleteTestCaseSteps',
                 'tl.deleteTestPlan' => 'this:deleteTestPlan',
                 'tl.deleteTestProject' => 'this:deleteTestProject',
+                'tl.deleteTestSuite' => 'this:deleteTestSuite',
                 'tl.uploadExecutionAttachment' => 'this:uploadExecutionAttachment',
                 'tl.uploadRequirementSpecificationAttachment' => 'this:uploadRequirementSpecificationAttachment',
                 'tl.uploadRequirementAttachment' => 'this:uploadRequirementAttachment',
