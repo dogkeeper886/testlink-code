@@ -1,0 +1,21 @@
+id: TC-INTEGRATION-002
+name: XML-RPC API Ping
+suite: integration
+priority: 2
+timeout: 30000
+dependencies:
+  - TC-INTEGRATION-001
+
+steps:
+  - name: Call tl.ping via XML-RPC
+    command: |
+      curl -sf -X POST http://localhost:8090/lib/api/xmlrpc/v1/xmlrpc.php \
+        -H "Content-Type: text/xml" \
+        -d '<?xml version="1.0"?><methodCall><methodName>tl.ping</methodName><params></params></methodCall>'
+    expectPatterns:
+      - "Hello!"
+
+criteria: |
+  Verify the XML-RPC API is accessible:
+  - tl.ping endpoint responds
+  - Response contains "Hello!" greeting

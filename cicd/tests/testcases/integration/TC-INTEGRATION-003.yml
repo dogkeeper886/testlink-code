@@ -1,0 +1,29 @@
+id: TC-INTEGRATION-003
+name: XML-RPC API Authentication
+suite: integration
+priority: 3
+timeout: 30000
+dependencies:
+  - TC-INTEGRATION-002
+
+steps:
+  - name: Call tl.checkDevKey with valid API key
+    command: |
+      curl -sf -X POST http://localhost:8090/lib/api/xmlrpc/v1/xmlrpc.php \
+        -H "Content-Type: text/xml" \
+        -d '<?xml version="1.0"?><methodCall><methodName>tl.checkDevKey</methodName><params><param><value><struct><member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member></struct></value></param></params></methodCall>'
+    expectPatterns:
+      - "<boolean>1</boolean>|true"
+
+  - name: Call tl.checkDevKey with invalid API key
+    command: |
+      curl -sf -X POST http://localhost:8090/lib/api/xmlrpc/v1/xmlrpc.php \
+        -H "Content-Type: text/xml" \
+        -d '<?xml version="1.0"?><methodCall><methodName>tl.checkDevKey</methodName><params><param><value><struct><member><name>devKey</name><value><string>invalid_key_12345</string></value></member></struct></value></param></params></methodCall>'
+    expectPatterns:
+      - "faultCode|invalid|5000"
+
+criteria: |
+  Verify API authentication works:
+  - Valid API key returns true/success
+  - Invalid API key returns error/fault

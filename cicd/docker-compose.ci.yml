@@ -1,0 +1,47 @@
+# Docker Compose for CI testing
+# Spins up TestLink + PostgreSQL with auto-initialization
+#
+# Usage:
+#   docker compose -f cicd/docker-compose.ci.yml up -d
+#   docker compose -f cicd/docker-compose.ci.yml down -v
+
+networks:
+  testlink-ci:
+    name: testlink-ci
+
+services:
+  db:
+    image: postgres:9.6
+    networks:
+      - testlink-ci
+    environment:
+      POSTGRES_USER: testlink
+      POSTGRES_PASSWORD: testlink
+      POSTGRES_DB: testlink
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testlink"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: ..
+    networks:
+      - testlink-ci
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8090:80"
+    volumes:
+      - ../logs:/var/testlink/logs:Z
+      - ../upload_area:/var/testlink/upload_area:Z
+      - ./scripts/ci-config_db.inc.php:/var/www/html/config_db.inc.php:ro
+      - ./scripts/ci-custom_config.inc.php:/var/www/html/custom_config.inc.php:ro
+      - ./scripts/init-db.sh:/var/www/html/cicd/scripts/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost/login.php || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s

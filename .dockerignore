@@ -2,3 +2,5 @@
 .env.example
 docker-compose.yml
 Dockerfile
+cicd/
+.github/

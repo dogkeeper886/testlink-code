@@ -1,0 +1,41 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: ["testlink_1_9_20_fixed"]
+  pull_request:
+    branches: ["testlink_1_9_20_fixed"]
+  workflow_dispatch:
+    inputs:
+      judge_mode:
+        description: "Test judge mode"
+        required: false
+        default: "simple"
+        type: choice
+        options:
+          - "simple"
+          - "dual"
+
+jobs:
+  build:
+    name: Build Tests
+    uses: ./.github/workflows/test-suite.yml
+    with:
+      suite: build
+      judge_mode: ${{ inputs.judge_mode || 'simple' }}
+
+  integration:
+    name: Integration Tests
+    needs: build
+    uses: ./.github/workflows/test-suite.yml
+    with:
+      suite: integration
+      judge_mode: ${{ inputs.judge_mode || 'simple' }}
+
+  e2e:
+    name: E2E Tests
+    needs: integration
+    uses: ./.github/workflows/test-suite.yml
+    with:
+      suite: e2e
+      judge_mode: ${{ inputs.judge_mode || 'simple' }}
