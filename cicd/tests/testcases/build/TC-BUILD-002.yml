@@ -1,0 +1,23 @@
+id: TC-BUILD-002
+name: Docker Image Build
+suite: build
+priority: 2
+timeout: 300000
+dependencies: []
+
+steps:
+  - name: Build Docker image
+    command: docker build -t testlink-ci-test .
+    timeout: 240000
+    rejectPatterns:
+      - "^ERROR"
+
+  - name: Verify image exists
+    command: docker image inspect testlink-ci-test --format '{{.Id}}'
+    expectPatterns:
+      - "sha256:"
+
+criteria: |
+  Verify the Docker image builds successfully:
+  - docker build completes without errors
+  - The resulting image is available locally

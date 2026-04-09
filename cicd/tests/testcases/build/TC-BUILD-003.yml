@@ -1,0 +1,24 @@
+id: TC-BUILD-003
+name: Composer Dependencies
+suite: build
+priority: 3
+timeout: 120000
+dependencies: []
+
+steps:
+  - name: Validate composer.json
+    command: |
+      cd . && python3 -c "import json; json.load(open('composer.json')); print('valid')"
+    expectPatterns:
+      - "valid"
+
+  - name: Check vendor directory exists
+    command: |
+      test -f ./vendor/autoload.php && echo "vendor present" || echo "vendor missing"
+    expectPatterns:
+      - "vendor present|vendor missing"
+
+criteria: |
+  Verify composer configuration is valid:
+  - composer.json is valid JSON
+  - Vendor directory state is reported

@@ -1,0 +1,34 @@
+id: TC-BUILD-001
+name: PHP Syntax Check
+suite: build
+goal: Verify PHP files have no syntax errors using the Docker image
+priority: 1
+timeout: 180000
+dependencies:
+  - TC-BUILD-002
+
+steps:
+  - name: Lint PHP files in lib/
+    command: |
+      docker run --rm testlink-ci-test find /var/www/html/lib -name '*.php' -exec php -l {} + 2>&1 | tail -5
+    timeout: 120000
+    expectPatterns:
+      - "No syntax errors detected"
+    rejectPatterns:
+      - "Parse error"
+      - "Fatal error"
+
+  - name: Lint PHP files in cfg/
+    command: |
+      docker run --rm testlink-ci-test find /var/www/html/cfg -name '*.php' -exec php -l {} + 2>&1 | tail -5
+    timeout: 30000
+    expectPatterns:
+      - "No syntax errors detected"
+    rejectPatterns:
+      - "Parse error"
+      - "Fatal error"
+
+criteria: |
+  Verify PHP source files have no syntax errors:
+  - php -l runs inside the Docker container on lib/ and cfg/ files
+  - No parse errors or fatal errors detected

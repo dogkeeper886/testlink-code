@@ -6,3 +6,5 @@ config_db.inc.php
 **/._*
 upload_area/**
 .env
+cicd/tests/node_modules/
+cicd/results/
