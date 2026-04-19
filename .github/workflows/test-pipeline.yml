@@ -1,11 +1,9 @@
 name: CI Pipeline
 
 on:
-  # Only fire automatically on push to the main branch. PRs do not trigger;
-  # use workflow_dispatch from the Actions tab to run against a feature
-  # branch on demand.
-  push:
-    branches: ["testlink_1_9_20_fixed"]
+  # Manual-only: trigger from the Actions tab. No automatic firing on push
+  # or PR — keeps CI noise off feature branches and lets you run the suite
+  # against any ref on demand.
   workflow_dispatch:
     inputs:
       judge_mode:
