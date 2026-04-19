@@ -11,7 +11,7 @@ steps:
     command: |
       bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
       <?xml version="1.0"?><methodCall><methodName>tl.checkDevKey</methodName><params><param><value><struct>
-        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
       </struct></value></param></params></methodCall>
       XMLDOC
     expectPatterns:
@@ -24,7 +24,8 @@ objective: |
 
 judgeContext: |
   Step 1 sends `tl.checkDevKey` with the seeded admin key
-  (a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4) via cicd/scripts/xmlrpc-capture.sh.
+  (passed in as `{{devKey}}` from TL_DEV_KEY in cicd/tests/.env, matching
+  what init-db.sh seeded into the users table) via cicd/scripts/xmlrpc-capture.sh.
   The helper mirrors the raw XML response to stderr; on success the
   stdout JSON envelope is `{"ok": true}`.
 

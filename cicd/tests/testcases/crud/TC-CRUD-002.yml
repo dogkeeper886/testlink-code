@@ -11,7 +11,7 @@ steps:
     command: |
       bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
       <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
-        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
         <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
         <member><name>testcaseprefix</name><value><string>P{{runId}}</string></value></member>
         <member><name>notes</name><value><string>{{testId}}</string></value></member>
@@ -26,7 +26,7 @@ steps:
     command: |
       bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
       <?xml version="1.0"?><methodCall><methodName>tl.createTestSuite</methodName><params><param><value><struct>
-        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
         <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
         <member><name>testsuitename</name><value><string>suite-{{testId}}-{{runId}}</string></value></member>
         <member><name>details</name><value><string>Created by {{testId}}</string></value></member>
@@ -41,7 +41,7 @@ steps:
     command: |
       bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
       <?xml version="1.0"?><methodCall><methodName>tl.getTestSuiteByID</methodName><params><param><value><struct>
-        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
         <member><name>testsuiteid</name><value><int>{{suiteId}}</int></value></member>
       </struct></value></param></params></methodCall>
       XMLDOC
@@ -52,7 +52,7 @@ steps:
     command: |
       bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
       <?xml version="1.0"?><methodCall><methodName>tl.deleteTestSuite</methodName><params><param><value><struct>
-        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
         <member><name>testsuiteid</name><value><int>{{suiteId}}</int></value></member>
       </struct></value></param></params></methodCall>
       XMLDOC
@@ -63,7 +63,7 @@ steps:
     command: |
       bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
       <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
-        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
         <member><name>prefix</name><value><string>P{{runId}}</string></value></member>
       </struct></value></param></params></methodCall>
       XMLDOC

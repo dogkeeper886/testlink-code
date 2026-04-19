@@ -39,9 +39,12 @@ for i in $(seq 1 60); do
 done
 
 echo "Initializing database..."
-docker compose -f "$COMPOSE_FILE" exec -T app bash /var/www/html/cicd/scripts/init-db.sh
+# Forward TL_DEV_KEY into the container so init-db.sh seeds the matching
+# admin key. Falls back to the script's own default if the env var is unset.
+docker compose -f "$COMPOSE_FILE" exec -T -e "TL_DEV_KEY=${TL_DEV_KEY:-}" app \
+  bash /var/www/html/cicd/scripts/init-db.sh
 
 echo "=== CI Environment Ready ==="
 echo "TestLink URL: $TL_URL"
 echo "Admin user: admin / admin"
-echo "API key: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
+echo "API key: ${TL_DEV_KEY:-a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4}"
