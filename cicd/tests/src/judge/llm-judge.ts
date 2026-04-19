@@ -265,11 +265,13 @@ export class LLMJudge {
   async unloadModel(): Promise<void> {
     try {
       process.stderr.write(`  [LLM] Unloading judge model ${this.model}...\n`);
+      // Use /api/generate (not /api/chat) for the unload — it doesn't need
+      // conversational semantics and an empty messages[] is awkward.
+      // keep_alive=0 is the documented Ollama unload pattern.
       await axios.post(
-        `${this.ollamaUrl}/api/chat`,
+        `${this.ollamaUrl}/api/generate`,
         {
           model: this.model,
-          messages: [],
           keep_alive: 0,
         },
         {

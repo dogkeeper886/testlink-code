@@ -10,10 +10,10 @@
 #   cicd/scripts/run-tests.sh [--suite <name>] [--id <id>] [tsx cli flags]
 #
 # Examples:
-#   cicd/scripts/run-tests.sh                        # all suites
-#   cicd/scripts/run-tests.sh --suite integration
-#   cicd/scripts/run-tests.sh --suite build          # no ci-up/ci-down
-#   cicd/scripts/run-tests.sh --id TC-E2E-001 --no-llm
+#   cicd/scripts/run-tests.sh                          # all suites
+#   cicd/scripts/run-tests.sh --suite crud
+#   cicd/scripts/run-tests.sh --suite build            # no ci-up/ci-down
+#   cicd/scripts/run-tests.sh --id TC-WORKFLOW-001 --no-llm
 
 set -euo pipefail
 
