@@ -20,6 +20,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# Load cicd/tests/.env if present so LLM_JUDGE_URL / LLM_JUDGE_MODEL etc.
+# reach the tsx CLI. Keep it optional — absent .env means rely on defaults.
+ENV_FILE="$REPO_ROOT/cicd/tests/.env"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+
 ARGS=("$@")
 
 # The build suite lints PHP and builds the image via `docker build`.

@@ -20,11 +20,13 @@
 #     projectId: "id"
 #
 # Env:
-#   TL_URL  — base URL of the TestLink instance (default http://localhost:8090)
+#   TL_URL  — base URL of the TestLink instance (default http://localhost:8091,
+#             matching the CI compose. run-tests.sh sources cicd/tests/.env which
+#             sets this; override per-call by exporting TL_URL beforehand.)
 
 set -eo pipefail
 
-URL="${TL_URL:-http://localhost:8090}/lib/api/xmlrpc/v1/xmlrpc.php"
+URL="${TL_URL:-http://localhost:8091}/lib/api/xmlrpc/v1/xmlrpc.php"
 REQUEST=$(cat)
 
 RESPONSE=$(curl -sS -X POST "$URL" \

@@ -117,7 +117,7 @@ IDs are never hardcoded. They flow from creation responses into subsequent steps
 ```yaml
 - name: Create test project
   command: |
-    curl -sf -X POST http://localhost:8090/lib/api/xmlrpc/v1/xmlrpc.php \
+    curl -sf -X POST "$TL_URL/lib/api/xmlrpc/v1/xmlrpc.php" \
       -H "Content-Type: text/xml" \
       -d '<?xml … tl.createTestProject … testprojectname=proj-{{runId}} …>'
   capture:
@@ -186,11 +186,11 @@ The repo has two compose files on purpose. They serve different audiences and ha
 | Seed data | Optional: `restore` service loads `docs/db_sample` sample data | `init-db.sh` loads schema + default data + hardcoded admin API key |
 | Image build | `build: .` from repo root Dockerfile | `build: ..` from the same Dockerfile |
 | Image pinning | `postgres:9.6` pinned; `maildev:latest` floats | Fully pinned (`postgres:9.6`) |
-| Host port | `0.0.0.0:8090:80` | `8090:80` |
+| Host port | `0.0.0.0:8090:80` | `${TL_PORT:-8091}:80` (default 8091) |
 
-### Important: port 8090 collides
+### Host port: 8090 (dev) vs 8091 (CI)
 
-Both compose files publish the app on host port **8090**. They cannot run at the same time. If the dev stack is up, CI setup will fail to bind. This is a known constraint — tests and the dev environment are serialized on a single developer machine. Long-term, the CI compose should either take a different port or use ephemeral host port assignment to remove this footgun.
+The two stacks bind different host ports so they can run simultaneously on a developer machine. CI uses `8091` by default, sourced from `TL_PORT` in `cicd/tests/.env`. All CI scripts and YAML test steps reference `$TL_URL` (default `http://localhost:8091`) rather than hardcoding the port; change the port in one place and everything follows.
 
 ### Why the separation is mandatory
 

@@ -32,7 +32,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8090:80"
+      - "${TL_PORT:-8091}:80"
     volumes:
       - ../logs:/var/testlink/logs:Z
       - ../upload_area:/var/testlink/upload_area:Z
