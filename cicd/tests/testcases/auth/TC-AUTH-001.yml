@@ -1,0 +1,21 @@
+id: TC-AUTH-001
+name: checkDevKey accepts the admin API key
+suite: auth
+priority: 1
+timeout: 30000
+dependencies:
+  - TC-SMOKE-002
+
+steps:
+  - name: tl.checkDevKey with valid key
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.checkDevKey</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|true"
+
+criteria: |
+  The admin API key seeded by init-db.sh is accepted by tl.checkDevKey.

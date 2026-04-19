@@ -1,0 +1,19 @@
+id: TC-SMOKE-002
+name: XML-RPC tl.ping
+suite: smoke
+priority: 2
+timeout: 30000
+dependencies:
+  - TC-SMOKE-001
+
+steps:
+  - name: Call tl.ping
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.ping</methodName><params></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "Hello!"
+
+criteria: |
+  The XML-RPC endpoint is reachable and returns the canonical Hello! greeting.

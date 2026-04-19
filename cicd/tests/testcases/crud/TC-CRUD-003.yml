@@ -1,0 +1,112 @@
+id: TC-CRUD-003
+name: Test case CRUD
+suite: crud
+priority: 3
+timeout: 60000
+dependencies:
+  - TC-AUTH-001
+
+steps:
+  - name: Create parent project (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>P{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<int>"
+    capture:
+      projectId: "id"
+
+  - name: Create parent test suite (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestSuite</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>testsuitename</name><value><string>suite-{{testId}}-{{runId}}</string></value></member>
+        <member><name>details</name><value><string>Created by {{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<int>"
+    capture:
+      suiteId: "id"
+
+  - name: Create test case
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestCase</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>testcasename</name><value><string>case-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testsuiteid</name><value><int>{{suiteId}}</int></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>authorlogin</name><value><string>admin</string></value></member>
+        <member><name>summary</name><value><string>Created by {{testId}}</string></value></member>
+        <member><name>steps</name><value><array><data><value><struct>
+          <member><name>step_number</name><value><int>1</int></value></member>
+          <member><name>actions</name><value><string>noop</string></value></member>
+          <member><name>expected_results</name><value><string>ok</string></value></member>
+        </struct></value></data></array></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<int>"
+    capture:
+      caseId: "id"
+
+  - name: Read test case back
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getTestCase</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>testcaseid</name><value><int>{{caseId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "case-{{testId}}-{{runId}}"
+
+  - name: Delete test case (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestCase</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>testcaseid</name><value><int>{{caseId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete parent suite (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestSuite</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>testsuiteid</name><value><int>{{suiteId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete parent project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>prefix</name><value><string>P{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+criteria: |
+  Test case CRUD via XML-RPC:
+  - Create parent project and suite with unique names.
+  - Create a test case in the suite, capturing its internal ID.
+  - Read it back by ID and verify the name round-trips.
+  - Delete in reverse order (case → suite → project).
+  All IDs flow through capture; no numeric literals used as parameters.

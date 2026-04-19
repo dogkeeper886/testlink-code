@@ -1,0 +1,52 @@
+id: TC-CRUD-001
+name: Test project CRUD
+suite: crud
+priority: 1
+timeout: 60000
+dependencies:
+  - TC-AUTH-001
+
+steps:
+  - name: Create test project
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>P{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<int>"
+    capture:
+      projectId: "id"
+
+  - name: Read project back by name
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getTestProjectByName</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "proj-{{testId}}-{{runId}}"
+
+  - name: Delete project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4</string></value></member>
+        <member><name>prefix</name><value><string>P{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+criteria: |
+  Test project CRUD via XML-RPC:
+  - Create a project with a unique name and prefix derived from runId.
+  - Read it back by name and verify the name round-trips.
+  - Delete it by prefix so no residue remains in the DB.
+  IDs are captured from the create response; no hardcoded integers.

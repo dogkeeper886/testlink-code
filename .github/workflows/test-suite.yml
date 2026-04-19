@@ -9,8 +9,12 @@ on:
         type: choice
         options:
           - "build"
-          - "integration"
-          - "e2e"
+          - "smoke"
+          - "auth"
+          - "crud"
+          - "workflow"
+          - "negative"
+          - "regression"
           - "all"
       judge_mode:
         description: "Test judge mode"

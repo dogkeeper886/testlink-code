@@ -1,0 +1,22 @@
+id: TC-AUTH-002
+name: checkDevKey rejects an invalid API key
+suite: auth
+priority: 2
+timeout: 30000
+dependencies:
+  - TC-SMOKE-002
+
+steps:
+  - name: tl.checkDevKey with bogus key
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.checkDevKey</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>not-a-real-key-{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "faultCode|invalid|2000"
+
+criteria: |
+  An unknown API key is rejected with a fault response — the server
+  does not silently return a success envelope for bad credentials.

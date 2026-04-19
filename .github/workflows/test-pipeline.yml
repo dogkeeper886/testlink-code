@@ -24,18 +24,34 @@ jobs:
       suite: build
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
 
-  integration:
-    name: Integration Tests
+  smoke:
+    name: Smoke Tests
     needs: build
     uses: ./.github/workflows/test-suite.yml
     with:
-      suite: integration
+      suite: smoke
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
 
-  e2e:
-    name: E2E Tests
-    needs: integration
+  auth:
+    name: Auth Tests
+    needs: smoke
     uses: ./.github/workflows/test-suite.yml
     with:
-      suite: e2e
+      suite: auth
+      judge_mode: ${{ inputs.judge_mode || 'simple' }}
+
+  crud:
+    name: CRUD Tests
+    needs: auth
+    uses: ./.github/workflows/test-suite.yml
+    with:
+      suite: crud
+      judge_mode: ${{ inputs.judge_mode || 'simple' }}
+
+  workflow:
+    name: Workflow Tests
+    needs: crud
+    uses: ./.github/workflows/test-suite.yml
+    with:
+      suite: workflow
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
