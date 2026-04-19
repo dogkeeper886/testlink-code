@@ -34,7 +34,9 @@ The `status` field in the FR's YAML frontmatter is authoritative. Update it as t
 
 ## Authoring
 
-Use the [`feature-request` skill](https://docs.claude.com/en/docs/claude-code/skills) (when working with Claude Code), or copy [`_template.md`](./_template.md) and fill in the sections. The skill produces both the FR doc and the GitHub issue and links them automatically.
+The canonical way is to copy [`_template.md`](./_template.md), fill in the sections, open the matching GitHub issue, and link the two together (FR's `issue:` frontmatter ↔ a `Spec:` line at the top of the issue body).
+
+If you happen to use Claude Code, there's an optional personal skill (`~/.claude/skills/feature-request/`) that automates the create-and-link flow. It's not part of this repository — install it locally if you want it. Without it, the `_template.md` plus a few `gh issue` commands gets you the same result.
 
 ## Index
 
