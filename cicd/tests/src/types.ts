@@ -231,8 +231,8 @@ export interface RunConfig {
   outputFormat: 'console' | 'json';
   /** Working directory (project root) */
   workingDir: string;
-  /** Path to docker-compose directory for log collection */
-  dockerComposePath: string;
+  /** Absolute path to the compose file used for log collection */
+  composeFile: string;
 }
 
 /**

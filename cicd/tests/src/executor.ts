@@ -325,7 +325,8 @@ ${r.stderr || '(empty)'}
 
     if (needsLogCollector) {
       this.logCollector = new LogCollector(
-        this.config.dockerComposePath,
+        this.config.composeFile,
+        this.config.workingDir,
         this.config.outputDir
       );
       try {

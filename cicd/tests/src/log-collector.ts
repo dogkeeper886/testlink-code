@@ -28,15 +28,17 @@ export class LogCollector {
   private process: ChildProcess | null = null;
   private sessionFile: string;
   private logFileStream: WriteStream | null = null;
-  private dockerComposeDir: string;
+  private composeFile: string;
+  private workingDir: string;
   private isRunning: boolean = false;
   private testMarkers: Map<string, TestMarkerState> = new Map();
   private writeQueue: Promise<void> = Promise.resolve();
   private lineBuffer: string = '';
   private outputDir: string;
 
-  constructor(dockerComposeDir: string, outputDir: string) {
-    this.dockerComposeDir = dockerComposeDir;
+  constructor(composeFile: string, workingDir: string, outputDir: string) {
+    this.composeFile = composeFile;
+    this.workingDir = workingDir;
     this.outputDir = outputDir;
     this.sessionFile = `/tmp/${CONFIG.sessionPrefix}-${Date.now()}.log`;
   }
@@ -56,9 +58,9 @@ export class LogCollector {
 
       this.process = spawn(
         'docker',
-        ['compose', 'logs', '--follow', '--timestamps'],
+        ['compose', '-f', this.composeFile, 'logs', '--follow', '--timestamps'],
         {
-          cwd: this.dockerComposeDir,
+          cwd: this.workingDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         }
       );

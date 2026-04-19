@@ -45,7 +45,7 @@ program
     const testsDir = path.dirname(new URL(import.meta.url).pathname);
     const projectRoot = path.resolve(testsDir, '..', '..', '..');
     const testcasesDir = path.join(testsDir, '..', 'testcases');
-    const dockerDir = path.join(projectRoot, 'docker');
+    const composeFile = path.join(projectRoot, 'cicd', 'docker-compose.ci.yml');
 
     // Generate output directory with timestamp
     const timestamp = startTime.toISOString().replace(/[:.]/g, '-').substring(0, 19);
@@ -66,11 +66,11 @@ program
       outputDir,
       outputFormat: options.format as RunConfig['outputFormat'],
       workingDir: projectRoot,
-      dockerComposePath: dockerDir,
+      composeFile,
     };
 
     process.stderr.write(`\n[CONFIG] Project root: ${projectRoot}\n`);
-    process.stderr.write(`[CONFIG] Docker compose: ${dockerDir}\n`);
+    process.stderr.write(`[CONFIG] Compose file: ${composeFile}\n`);
     process.stderr.write(`[CONFIG] Testcases: ${testcasesDir}\n`);
     process.stderr.write(`[CONFIG] Output: ${outputDir}\n`);
     process.stderr.write(`[CONFIG] LLM Judge: ${config.noLlm ? 'disabled' : config.judgeUrl}\n`);
