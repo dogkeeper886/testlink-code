@@ -32,10 +32,12 @@ export const CONFIG = {
   defaultTimeout: 120000,
   defaultStepTimeout: 60000,
   
-  // LLM Judge defaults
+  // LLM Judge defaults — overridable via LLM_JUDGE_URL / LLM_JUDGE_MODEL
+  // in cicd/tests/.env (loaded by run-tests.sh) or the --judge-url /
+  // --judge-model CLI flags.
   llm: {
-    defaultUrl: 'http://localhost:11434',
-    defaultModel: 'llama3:8b',
+    defaultUrl: process.env.LLM_JUDGE_URL || 'http://localhost:11434',
+    defaultModel: process.env.LLM_JUDGE_MODEL || 'llama3:8b',
     timeout: 300000,
     stdoutLimit: 1000,
     stderrLimit: 500,
