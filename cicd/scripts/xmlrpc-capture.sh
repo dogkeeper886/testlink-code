@@ -34,12 +34,20 @@ RESPONSE=$(curl -sS -X POST "$URL" \
 # Mirror the response to stderr for expectPatterns / debugging.
 printf '%s\n' "$RESPONSE" >&2
 
-# First <int> in the body — typically the created entity id.
-ID=$(printf '%s' "$RESPONSE" | grep -oP '(?<=<int>)\d+' | head -1 || true)
+# The `id` member of the response — typically the created entity id.
+# TestLink's XML-RPC is inconsistent about typing and whitespace: the
+# same field is sometimes emitted as <int> and sometimes as <string>,
+# and the <value> wrapper may or may not have surrounding whitespace.
+# Collapse the response to one line and match the `id` member directly
+# to cope with both shapes.
+FLAT=$(printf '%s' "$RESPONSE" | tr -d '\n' | tr -s ' ')
+ID=$(printf '%s' "$FLAT" \
+  | grep -oP '<name>id</name>\s*<value>\s*<(?:int|string)>\K[0-9]+' \
+  | head -1 || true)
 
 # Fault code (if the server returned a <fault>).
-FAULT=$(printf '%s' "$RESPONSE" \
-  | grep -oP '(?<=<name>faultCode</name><value><int>)\d+' \
+FAULT=$(printf '%s' "$FLAT" \
+  | grep -oP '<name>faultCode</name>\s*<value>\s*<(?:int|string)>\K[0-9]+' \
   | head -1 || true)
 
 if [ -n "${FAULT:-}" ]; then

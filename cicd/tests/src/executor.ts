@@ -233,10 +233,16 @@ export class TestExecutor {
       const resolvedStep = { ...step, command: resolvedCommand };
       const result = await this.executeStep(resolvedStep, testCase.timeout);
 
+      const resolvedExpect = step.expectPatterns?.map((p) =>
+        this.substituteVariables(p)
+      );
+      const resolvedReject = step.rejectPatterns?.map((p) =>
+        this.substituteVariables(p)
+      );
       result.patternMatches = this.checkPatterns(
         result,
-        step.expectPatterns,
-        step.rejectPatterns
+        resolvedExpect,
+        resolvedReject
       );
 
       this.captureVariables(step, result);
