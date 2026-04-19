@@ -203,7 +203,10 @@ export class TestExecutor {
 
     this.currentTest++;
     this.currentTestId = testCase.id;
-    this.variables = {};
+    this.variables = {
+      runId: Date.now().toString(),
+      testId: testCase.id,
+    };
     this.progress(
       `[${timestamp}] [${this.currentTest}/${this.totalTests}] ${testCase.id}: ${testCase.name}`
     );
