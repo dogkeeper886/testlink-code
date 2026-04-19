@@ -6,10 +6,10 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "test": "tsx src/cli.ts run",
-    "test:build": "tsx src/cli.ts run --suite build",
-    "test:integration": "tsx src/cli.ts run --suite integration",
-    "test:e2e": "tsx src/cli.ts run --suite e2e",
+    "test": "bash ../scripts/run-tests.sh",
+    "test:build": "bash ../scripts/run-tests.sh --suite build",
+    "test:integration": "bash ../scripts/run-tests.sh --suite integration",
+    "test:e2e": "bash ../scripts/run-tests.sh --suite e2e",
     "list": "tsx src/cli.ts list",
     "dev": "tsx src/cli.ts"
   },

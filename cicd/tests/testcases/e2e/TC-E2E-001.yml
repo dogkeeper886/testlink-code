@@ -87,10 +87,6 @@ steps:
     expectPatterns:
       - "Success|status.*1|true"
 
-  - name: Tear down CI environment
-    command: bash ./cicd/scripts/ci-down.sh
-    timeout: 30000
-
 criteria: |
   Verify full CRUD workflow through XML-RPC API:
   - Create a test project with prefix CIT
@@ -99,4 +95,5 @@ criteria: |
   - Retrieve and verify the test case
   - Delete the test case via tl.deleteTestCase
   - Delete the test suite via tl.deleteTestSuite
-  - Clean up the environment
+  Session teardown (docker compose down -v) is handled by
+  cicd/scripts/run-tests.sh after the run completes.

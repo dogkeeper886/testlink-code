@@ -1,16 +1,11 @@
 id: TC-INTEGRATION-001
-name: TestLink Container Startup
+name: TestLink Login Page Responds
 suite: integration
 priority: 1
-timeout: 180000
-dependencies:
-  - TC-BUILD-002
+timeout: 30000
+dependencies: []
 
 steps:
-  - name: Start CI environment
-    command: bash ./cicd/scripts/ci-up.sh
-    timeout: 150000
-
   - name: Verify app is responding
     command: |
       curl -sf http://localhost:8090/login.php | grep -o "Login" | head -1
@@ -18,7 +13,6 @@ steps:
       - "Login"
 
 criteria: |
-  Verify TestLink starts and serves the login page:
-  - Docker containers start (app + postgres)
-  - Database is initialized with schema and default data
-  - Login page is accessible on port 8090
+  Verify the login page is served on port 8090.
+  Session setup (docker compose up, DB init) is handled by
+  cicd/scripts/run-tests.sh before any test runs.

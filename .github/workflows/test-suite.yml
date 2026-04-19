@@ -68,8 +68,6 @@ jobs:
       - name: Run tests
         id: run-tests
         run: |
-          cd cicd/tests
-
           # Build judge flags based on input
           JUDGE_FLAGS=""
           if [ "${{ inputs.judge_mode }}" = "simple" ] || [ -z "${{ inputs.judge_mode }}" ]; then
@@ -88,8 +86,9 @@ jobs:
           echo "Judge mode: ${{ inputs.judge_mode || 'simple' }}"
           echo "Judge flags: $JUDGE_FLAGS"
 
-          # Run tests with JSON output
-          npx tsx src/cli.ts run $SUITE_FLAG $JUDGE_FLAGS --format json > /tmp/test-results.json || true
+          # Run through the wrapper: handles ci-up before and ci-down after
+          # (trap EXIT) so teardown is guaranteed even on test failure.
+          bash cicd/scripts/run-tests.sh $SUITE_FLAG $JUDGE_FLAGS --format json > /tmp/test-results.json || true
 
           echo "--- JSON Results ---"
           cat /tmp/test-results.json
