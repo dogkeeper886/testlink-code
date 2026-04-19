@@ -9079,6 +9079,180 @@ class TestlinkXMLRPCServer extends IXR_Server {
     }
 
     /**
+     * Delete a build by buildid.
+     *
+     * Permanently removes a build and all its executions, attachments, and
+     * step results from the database. Use with care — there is no undo.
+     * For a softer "stop new executions on this build" operation, use
+     * tl.closeBuild instead.
+     *
+     * @param struct $args
+     * @param string $args["devKey"]
+     * @param int $args["buildid"]
+     *
+     * @return mixed $resultInfo
+     *        [status] => true on success
+     *        [id] => buildid that was deleted
+     *        [message] => optional message string
+     * @access public
+     */
+    public function deleteBuild($args) {
+        $operation = __FUNCTION__;
+        $messagePrefix = "({$operation}) - ";
+
+        $resultInfo = array();
+        $resultInfo[0]["id"] = 0;
+        $resultInfo[0]["status"] = true;
+        $resultInfo[0]["operation"] = $operation;
+        $resultInfo[0]["message"] = GENERAL_SUCCESS_STR;
+
+        $this->_setArgs( $args );
+
+        $checkFunctions = array(
+                'authenticate'
+        );
+        $status_ok = $this->_runChecks( $checkFunctions, $messagePrefix );
+
+        if($status_ok) {
+            $status_ok = $this->_isParamPresent( self::$buildIDParamName, $messagePrefix, self::SET_ERROR );
+        }
+
+        if($status_ok) {
+            $buildID = $this->args[self::$buildIDParamName];
+            if(!($status_ok = is_int( $buildID ))) {
+                $msg = sprintf( BUILDID_NOT_INTEGER_STR, $buildID );
+                $this->errors[] = new IXR_Error( BUILDID_NOT_INTEGER, $msg );
+            }
+        }
+
+        if($status_ok) {
+            // Resolve parent test plan to scope the permission check, mirroring
+            // closeBuild — the right `testplan_create_build` is granted per plan.
+            $bm = new build_mgr( $this->dbObj );
+
+            $buildID = intval( $this->args[self::$buildIDParamName] );
+            $opx = array(
+                    'output' => 'fields',
+                    'fields' => 'id,testplan_id'
+            );
+            $buildInfo = $bm->get_by_id( $buildID, $opx );
+
+            if($buildInfo == false || count( $buildInfo ) == 0) {
+                $status_ok = false;
+                $msg = sprintf( INVALID_BUILDID_STR, $buildID );
+                $this->errors[] = new IXR_Error( INVALID_BUILDID, $msg );
+            }
+        }
+
+        if($status_ok) {
+            $context = array();
+            $context[self::$testPlanIDParamName] = $buildInfo['testplan_id'];
+
+            $status_ok = $this->userHasRight( "testplan_create_build", self::CHECK_PUBLIC_PRIVATE_ATTR, $context );
+        }
+
+        if($status_ok) {
+            $bm->delete( $buildID );
+            $resultInfo[0]["id"] = $buildID;
+        }
+
+        return $status_ok ? $resultInfo : $this->errors;
+    }
+
+    /**
+     * Remove a test case from a test plan (the inverse of
+     * addTestCaseToTestPlan). Removes every linked version of the case
+     * across every platform under the given plan, mirroring the UI's
+     * "remove" action. If a specific platform is given, only the link on
+     * that platform is removed.
+     *
+     * @param struct $args
+     * @param string $args["devKey"]
+     * @param int $args["testplanid"]
+     * @param int $args["testcaseid"]
+     * @param int $args["platformid"]  (optional — restrict to one platform)
+     *
+     * @return mixed $resultInfo
+     *        [status] => true on success
+     *        [id] => testcaseid that was unlinked
+     *        [message] => optional message string
+     * @access public
+     */
+    public function removeTestCaseFromTestPlan($args) {
+        $operation = __FUNCTION__;
+        $messagePrefix = "({$operation}) - ";
+
+        $resultInfo = array();
+        $resultInfo[0]["id"] = 0;
+        $resultInfo[0]["status"] = true;
+        $resultInfo[0]["operation"] = $operation;
+        $resultInfo[0]["message"] = GENERAL_SUCCESS_STR;
+
+        $this->_setArgs( $args );
+
+        $checkFunctions = array(
+                'authenticate',
+                'checkTestPlanID',
+                'checkTestCaseIdentity'
+        );
+        $status_ok = $this->_runChecks( $checkFunctions, $messagePrefix );
+
+        if($status_ok) {
+            // Same right as addTestCaseToTestPlan — symmetric mutation.
+            $status_ok = $this->userHasRight( "testplan_planning", self::CHECK_PUBLIC_PRIVATE_ATTR );
+            if(!$status_ok) {
+                $this->errors[] = new IXR_Error( INSUFFICIENT_RIGHTS, $messagePrefix . INSUFFICIENT_RIGHTS_STR );
+            }
+        }
+
+        $items_to_unlink = null;
+        if($status_ok) {
+            $tplan_id = intval( $this->args[self::$testPlanIDParamName] );
+            $tcase_id = intval( $this->args[self::$testCaseIDParamName] );
+
+            $platform_filter = '';
+            if($this->_isParamPresent( self::$platformIDParamName )) {
+                $platform_id = intval( $this->args[self::$platformIDParamName] );
+                $platform_filter = " AND TPTCV.platform_id = {$platform_id} ";
+            }
+
+            // Resolve every (tcversion_id, platform_id) currently linking this
+            // case to this plan. Build the items_to_unlink map the same shape
+            // planAddTC.php constructs before calling unlink_tcversions.
+            $sql = " SELECT TPTCV.tcversion_id, TPTCV.platform_id " .
+                   " FROM {$this->tables['testplan_tcversions']} TPTCV " .
+                   " JOIN {$this->tables['nodes_hierarchy']} NH " .
+                   "   ON NH.id = TPTCV.tcversion_id " .
+                   " WHERE TPTCV.testplan_id = {$tplan_id} " .
+                   "   AND NH.parent_id = {$tcase_id} " .
+                   $platform_filter;
+
+            $rs = $this->dbObj->get_recordset( $sql );
+
+            if(is_null( $rs ) || count( $rs ) == 0) {
+                $status_ok = false;
+                $msg = $messagePrefix . sprintf( "Test case id:%d is not linked to test plan id:%d", $tcase_id, $tplan_id );
+                $this->errors[] = new IXR_Error( -32001, $msg );
+            } else {
+                foreach( $rs as $row ) {
+                    $tcv = intval( $row['tcversion_id'] );
+                    $plat = intval( $row['platform_id'] );
+                    $items_to_unlink['tcversion'][$tcase_id] = $tcv;
+                    $items_to_unlink['platform'][$plat] = $plat;
+                    $items_to_unlink['items'][$tcase_id][$plat] = $tcv;
+                }
+            }
+        }
+
+        if($status_ok) {
+            $this->tplanMgr->unlink_tcversions( $tplan_id, $items_to_unlink );
+            $resultInfo[0]["id"] = $tcase_id;
+        }
+
+        return $status_ok ? $resultInfo : $this->errors;
+    }
+
+    /**
      * update result of LATEST execution for each
      * step.
      *
@@ -9211,6 +9385,7 @@ class TestlinkXMLRPCServer extends IXR_Server {
                 'tl.setTestCaseExecutionResult' => 'this:reportTCResult',
                 'tl.createBuild' => 'this:createBuild',
                 'tl.closeBuild' => 'this:closeBuild',
+                'tl.deleteBuild' => 'this:deleteBuild',
                 'tl.createPlatform' => 'this:createPlatform',
                 'tl.createTestCase' => 'this:createTestCase',
                 'tl.createTestCaseSteps' => 'this:createTestCaseSteps',
@@ -9231,6 +9406,7 @@ class TestlinkXMLRPCServer extends IXR_Server {
                 'tl.uploadAttachment' => 'this:uploadAttachment',
                 'tl.assignRequirements' => 'this:assignRequirements',
                 'tl.addTestCaseToTestPlan' => 'this:addTestCaseToTestPlan',
+                'tl.removeTestCaseFromTestPlan' => 'this:removeTestCaseFromTestPlan',
                 'tl.addPlatformToTestPlan' => 'this:addPlatformToTestPlan',
                 'tl.removePlatformFromTestPlan' => 'this:removePlatformFromTestPlan',
                 'tl.getExecCountersByBuild' => 'this:getExecCountersByBuild',
