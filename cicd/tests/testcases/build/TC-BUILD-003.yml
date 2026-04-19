@@ -3,22 +3,62 @@ name: Composer Dependencies
 suite: build
 priority: 3
 timeout: 120000
-dependencies: []
+dependencies:
+  - TC-BUILD-002
 
 steps:
   - name: Validate composer.json
     command: |
-      cd . && python3 -c "import json; json.load(open('composer.json')); print('valid')"
+      docker run --rm testlink-ci-test php -r '
+        $j = json_decode(file_get_contents("/var/www/html/composer.json"), true);
+        if (!is_array($j)) { fwrite(STDERR, "invalid json\n"); exit(1); }
+        echo "valid\n";
+      '
     expectPatterns:
       - "valid"
 
   - name: Check vendor directory exists
     command: |
-      test -f ./vendor/autoload.php && echo "vendor present" || echo "vendor missing"
+      docker run --rm testlink-ci-test sh -c '
+        test -f /var/www/html/vendor/autoload.php && echo "vendor present" || echo "vendor missing"
+      '
     expectPatterns:
       - "vendor present|vendor missing"
 
+objective: |
+  Confirm the composer.json baked into the Docker image is valid JSON, and
+  report whether vendor/ is present. Validates the dependency manifest
+  shipped in the image; vendor presence depends on the build pipeline.
+
+judgeContext: |
+  Step 1 runs `docker run --rm testlink-ci-test php -r '<json_decode...>'`.
+  The PHP one-liner reads /var/www/html/composer.json from inside the
+  image, parses it, and prints "valid" on success or writes "invalid json"
+  to stderr and exits 1 on failure.
+
+  Step 2 runs `docker run --rm testlink-ci-test sh -c 'test -f
+  /var/www/html/vendor/autoload.php && echo "vendor present" || echo
+  "vendor missing"'`. Either output is acceptable — the current
+  Dockerfile does not run `composer install`, so vendor is only present
+  if the host had a vendor/ directory when the image was built (and got
+  COPY'd in). The point of step 2 is to *report* the state, not to
+  enforce a specific one.
+
+  Silent failures to watch for:
+  - composer.json is valid JSON but has missing required fields (e.g. no
+    "require" key). Beyond this test's scope — json_decode happily
+    parses any valid JSON. Flag in your verdict if you notice the
+    objective wants stricter validation (it doesn't, currently).
+  - "vendor missing" output is not itself a failure; only fail if BOTH
+    "vendor present" AND "vendor missing" are absent (suggests step 2
+    crashed before the test/echo).
+
 criteria: |
-  Verify composer configuration is valid:
-  - composer.json is valid JSON
-  - Vendor directory state is reported
+  PASS when:
+  - Step 1 stdout contains "valid".
+  - Step 2 stdout contains either "vendor present" or "vendor missing"
+    (both are acceptable per the objective).
+
+  FAIL on:
+  - Step 1 missing "valid" or stderr containing "invalid json".
+  - Step 2 stdout missing both vendor markers.

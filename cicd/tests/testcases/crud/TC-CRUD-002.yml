@@ -70,10 +70,44 @@ steps:
     expectPatterns:
       - "<boolean>1</boolean>|status.*true"
 
+objective: |
+  Confirm the Test Suite entity supports CRUD under a parent project, with
+  parent-child IDs flowing through capture (no hardcoded numeric literals).
+  This validates the project→suite hierarchy that case-level tests build on.
+
+judgeContext: |
+  Five steps form a setup → exercise → teardown sequence:
+  1. Create parent project — needed because suites can't exist without one.
+  2. Create suite under {{projectId}} — captures suiteId from response.
+  3. Read suite by {{suiteId}} — proves the suite's name round-trips.
+  4. Delete suite by {{suiteId}}.
+  5. Delete project by prefix.
+
+  Steps 4 and 5 are reverse-creation-order teardown; both must succeed
+  even if step 3 fails (the framework runs them as part of the case).
+
+  All XML-RPC calls go through xmlrpc-capture.sh (raw response in stderr,
+  JSON envelope in stdout). Successful create responses contain
+  <name>id</name>; successful reads contain the literal entity name;
+  successful deletes contain <boolean>1</boolean>.
+
+  Silent failures to watch for:
+  - Suite created but assigned to a different parent project (read still
+    returns the right name, but the parent_id in the response is wrong —
+    not directly checked here, but suspicious if entity counts in the
+    container logs disagree).
+  - Teardown delete returns true but only deleted a stale entity from a
+    previous run, leaving the new entity orphaned. Run-ID-suffixed names
+    make this unlikely, but flag if container logs show double-delete
+    or constraint violations.
+  - Read returns a fault envelope but the suite name string happens to
+    appear in the fault message — false positive.
+
 criteria: |
-  Test suite CRUD via XML-RPC:
-  - Create a parent project (setup), capturing its ID.
-  - Create a suite under the project, capturing its ID from the response.
-  - Read it back by ID and confirm the name round-trips.
-  - Delete the suite, then the project, in reverse creation order.
-  All IDs flow through capture; no numeric literals used as parameters.
+  PASS when:
+  - Steps 1, 2 each return a new id (visible in <name>id</name>).
+  - Step 3 stderr contains "suite-{{testId}}-{{runId}}".
+  - Steps 4, 5 each return <boolean>1</boolean>.
+
+  FAIL on any fault envelope, missing entity, name mismatch, or
+  incomplete teardown (residue would block re-runs).

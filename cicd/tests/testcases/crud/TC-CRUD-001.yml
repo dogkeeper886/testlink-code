@@ -44,9 +44,44 @@ steps:
     expectPatterns:
       - "<boolean>1</boolean>|status.*true"
 
+objective: |
+  Confirm the Test Project entity supports the full create-read-delete
+  lifecycle via XML-RPC. Project is the root entity in the TestLink
+  hierarchy, so this CRUD must work before suites or cases can be tested.
+
+judgeContext: |
+  Three steps, each via xmlrpc-capture.sh:
+  1. Create — calls tl.createTestProject with a unique name derived from
+     {{testId}}-{{runId}}. Successful response contains <name>id</name>
+     followed by the new project ID; the helper captures it as projectId.
+  2. Read  — calls tl.getTestProjectByName with the same unique name.
+     Successful response contains the project name string verbatim,
+     proving the entity round-trips.
+  3. Delete — calls tl.deleteTestProject by prefix (P<runId>). Successful
+     response contains <boolean>1</boolean> or status:true.
+
+  Each helper invocation puts the raw XML response in stderr (where
+  expectPatterns matches) and a JSON envelope in stdout. A `{"ok": true,
+  "id": N}` stdout means the XML-RPC call returned a value; a `{"ok":
+  false, "faultCode": N}` means a fault was returned.
+
+  Silent failures to watch for:
+  - Read step matches the expected name pattern but the response actually
+    contains a *different* project that happens to share part of the
+    name. The expected pattern is the full proj-<testId>-<runId> string,
+    so an exact substring match here is meaningful.
+  - Delete returns true but a stale project with the same prefix from a
+    prior aborted run is what got deleted (the new one persists). With
+    runId in the prefix this is unlikely but worth noting.
+  - Create reports success with no <name>id</name> pair (envelope
+    structure changed) — would fail expectPattern but read carefully.
+
 criteria: |
-  Test project CRUD via XML-RPC:
-  - Create a project with a unique name and prefix derived from runId.
-  - Read it back by name and verify the name round-trips.
-  - Delete it by prefix so no residue remains in the DB.
-  IDs are captured from the create response; no hardcoded integers.
+  PASS when:
+  - Step 1 stdout shows {"ok": true, "id": <number>} and stderr contains
+    <name>id</name>.
+  - Step 2 stderr contains the literal string "proj-{{testId}}-{{runId}}".
+  - Step 3 stderr contains <boolean>1</boolean>.
+
+  FAIL on any fault envelope, missing entity ID, name mismatch, or
+  failed deletion.

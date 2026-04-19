@@ -15,5 +15,29 @@ steps:
     expectPatterns:
       - "Hello!"
 
+objective: |
+  Confirm the XML-RPC API endpoint is reachable and the server responds to
+  the canonical no-auth ping. This proves the API layer is wired up before
+  any auth or CRUD test attempts a real call.
+
+judgeContext: |
+  Step 1 sends an XML-RPC `tl.ping` request via cicd/scripts/xmlrpc-capture.sh.
+  The helper:
+  - POSTs the request to $TL_URL/lib/api/xmlrpc/v1/xmlrpc.php
+  - mirrors the raw XML response to stderr (where expectPatterns can match)
+  - prints structured JSON to stdout: `{"ok": true, "id": N}` or `{"ok": true}`
+    on success, or `{"ok": false, "faultCode": N}` on a fault response
+
+  A healthy ping returns the literal string "Hello!" inside an XML-RPC
+  response envelope (visible in stderr).
+
+  Silent failures to watch for:
+  - HTTP 200 but the body is a PHP error page (no XML, no "Hello!").
+  - XML-RPC fault returned where the faultString happens to mention
+    "Hello" (very unlikely, but pattern matchers can't tell).
+  - API endpoint disabled by config but the server returns an empty
+    valid-looking envelope.
+
 criteria: |
-  The XML-RPC endpoint is reachable and returns the canonical Hello! greeting.
+  PASS when the response (visible in stderr) contains the string "Hello!".
+  FAIL on a fault response, an HTML error page, or empty output.

@@ -17,7 +17,45 @@ steps:
     expectPatterns:
       - "sha256:"
 
+objective: |
+  The Dockerfile at the repo root must build cleanly into a TestLink image
+  that downstream build-suite tests can run against. This is the foundation
+  test for the build suite — every other TC-BUILD-* depends on this image
+  existing as `testlink-ci-test`.
+
+judgeContext: |
+  Step 1 runs `docker build`. Its stdout is BuildKit progress output:
+  layer-by-layer "[N/M] STEP" lines, "CACHED" markers when a layer is
+  reused from cache, and a final "writing image sha256:..." or
+  "Successfully built <id>" line. Stderr is mostly the same stream
+  duplicated by docker; an "ERROR:" line at the start of a line means a
+  build failure.
+
+  Step 2 runs `docker image inspect`. Its stdout should be a single line
+  containing `sha256:<64 hex chars>` if the image was registered by step 1.
+
+  Silent failures to watch for:
+  - Step 1 exits 0 but the output ends mid-stage (truncated build, often
+    an OOM or daemon disconnect — no explicit ERROR but no final "writing
+    image" either).
+  - All layers report CACHED including layers that should have been
+    rebuilt because the Dockerfile or COPY context changed (suggests the
+    test ran against a stale cache and didn't actually exercise current
+    sources). Some CACHED layers are normal; suspicious only if every
+    layer is cached and the test's purpose was to validate a Dockerfile
+    change.
+  - Step 2 returns a sha256 from a stale prior image (this test alone
+    can't detect that — flag only if the build output suggested failure
+    but the inspect still returned a SHA).
+
 criteria: |
-  Verify the Docker image builds successfully:
-  - docker build completes without errors
-  - The resulting image is available locally
+  PASS when:
+  - The build progresses through stages and produces a final image
+    identifier (a "writing image sha256:..." or equivalent end-of-build
+    marker in step 1 output).
+  - Step 2 returns a sha256:... line confirming the image is registered.
+
+  FAIL when:
+  - Step 1 emits an ERROR line or aborts mid-build.
+  - Step 2 cannot find the image.
+  - The build output suggests a silent failure per the context above.

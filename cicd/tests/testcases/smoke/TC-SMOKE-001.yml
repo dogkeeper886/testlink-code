@@ -7,11 +7,34 @@ dependencies: []
 
 steps:
   - name: GET /login.php
-    command: curl -sf http://localhost:8090/login.php | grep -o "Login" | head -1
+    command: curl -sf "$TL_URL/login.php" | grep -o "Login" | head -1
     expectPatterns:
       - "Login"
+
+objective: |
+  Confirm the TestLink HTTP server is up and serving the login page on the
+  CI host port. This is the first gate of the smoke suite; if it fails,
+  every downstream test is meaningless.
+
+judgeContext: |
+  Step 1 runs `curl -sf` against $TL_URL/login.php (default
+  http://localhost:8091/login.php) and pipes through `grep -o "Login" |
+  head -1`. A healthy run prints the single word "Login" on stdout.
+
+  Silent failures to watch for:
+  - HTTP 200 but the page content is "Service unavailable" or a generic
+    PHP fatal — grep finds no "Login" and stdout is empty, but exit code
+    could still be 0 because of the pipe. The expected "Login" pattern
+    not appearing is the real signal.
+  - Container running but Apache misconfigured: response is a directory
+    listing or default Apache page (no "Login" string).
+  - Curl follows a redirect to a different page (3xx) — grep silently
+    misses.
 
 criteria: |
   Baseline check: the HTTP server is up and serving the login page.
   Session setup (docker compose up + DB init) is handled by
   cicd/scripts/run-tests.sh before any test runs.
+
+  PASS when stdout contains "Login".
+  FAIL when stdout is empty or grep returned nothing.

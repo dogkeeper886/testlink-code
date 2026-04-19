@@ -103,10 +103,45 @@ steps:
     expectPatterns:
       - "<boolean>1</boolean>|status.*true"
 
+objective: |
+  Confirm the Test Case entity supports CRUD under the suite/project
+  hierarchy, including the steps[] sub-structure. Test Case is the leaf
+  entity TestLink users actually author against, so its CRUD path is the
+  most user-visible.
+
+judgeContext: |
+  Seven steps in setup → create-leaf → read → reverse-teardown order:
+  1. Create parent project (P<runId> prefix)
+  2. Create parent suite under that project
+  3. Create test case under that suite, with one inline step entry
+  4. Read the case back by ID, verify its name
+  5-7. Delete case → suite → project (reverse creation order)
+
+  The test exercises:
+  - tl.createTestCase with embedded steps[] array (deeper XML-RPC payload
+    than the simpler create operations)
+  - getTestCase round-trip (case names round-trip via the suite hierarchy)
+  - cascade-aware teardown that doesn't rely on cascading deletes
+
+  All calls go through xmlrpc-capture.sh (raw XML in stderr, JSON envelope
+  in stdout). Each create captures its new ID into a variable used by
+  subsequent steps; no numeric literals are baked into params.
+
+  Silent failures to watch for:
+  - Case created but with empty steps[] (the embedded steps array got
+    serialized incorrectly). Read might still return the name, masking
+    the data-loss. Container logs may show steps_get returning 0 rows.
+  - Read returns the right name but a different testcaseid (rare; would
+    indicate a routing bug).
+  - Teardown delete-case returns true but the case row stays in the DB
+    because of an FK constraint — would block re-runs and surface as
+    "duplicate name" on the next attempt.
+
 criteria: |
-  Test case CRUD via XML-RPC:
-  - Create parent project and suite with unique names.
-  - Create a test case in the suite, capturing its internal ID.
-  - Read it back by ID and verify the name round-trips.
-  - Delete in reverse order (case → suite → project).
-  All IDs flow through capture; no numeric literals used as parameters.
+  PASS when:
+  - Steps 1-3 each return a new id (visible in <name>id</name>).
+  - Step 4 stderr contains "case-{{testId}}-{{runId}}".
+  - Steps 5-7 each return <boolean>1</boolean>.
+
+  FAIL on any fault envelope, missing entity, name mismatch, or
+  incomplete teardown (would prevent idempotent re-run).
