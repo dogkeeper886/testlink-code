@@ -1,9 +1,10 @@
 name: CI Pipeline
 
 on:
+  # Only fire automatically on push to the main branch. PRs do not trigger;
+  # use workflow_dispatch from the Actions tab to run against a feature
+  # branch on demand.
   push:
-    branches: ["testlink_1_9_20_fixed"]
-  pull_request:
     branches: ["testlink_1_9_20_fixed"]
   workflow_dispatch:
     inputs:

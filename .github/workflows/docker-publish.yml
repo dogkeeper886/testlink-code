@@ -5,9 +5,13 @@ name: Docker
 # separate terms of service, privacy policy, and support
 # documentation.
 
+# Manual-only: this workflow publishes to GHCR and requires registry write
+# auth that's not configured on every fork. Trigger from the Actions tab
+# when you actually want to release. Restricted to the main branch via the
+# job's `if:` guard below so accidental dispatches from feature branches
+# can't publish.
 on:
-  push:
-    branches: [ "*" ]
+  workflow_dispatch:
 
 env:
   # Use docker.io for Docker Hub if empty
@@ -18,7 +22,8 @@ env:
 
 jobs:
   build:
-
+    # Guard: only ever publish from the main branch, even when dispatched.
+    if: github.ref == 'refs/heads/testlink_1_9_20_fixed'
     runs-on: ubuntu-latest
     permissions:
       contents: read
