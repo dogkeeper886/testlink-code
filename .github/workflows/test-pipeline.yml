@@ -1,10 +1,9 @@
 name: CI Pipeline
 
 on:
-  push:
-    branches: ["testlink_1_9_20_fixed"]
-  pull_request:
-    branches: ["testlink_1_9_20_fixed"]
+  # Manual-only: trigger from the Actions tab. No automatic firing on push
+  # or PR — keeps CI noise off feature branches and lets you run the suite
+  # against any ref on demand.
   workflow_dispatch:
     inputs:
       judge_mode:
@@ -24,18 +23,34 @@ jobs:
       suite: build
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
 
-  integration:
-    name: Integration Tests
+  smoke:
+    name: Smoke Tests
     needs: build
     uses: ./.github/workflows/test-suite.yml
     with:
-      suite: integration
+      suite: smoke
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
 
-  e2e:
-    name: E2E Tests
-    needs: integration
+  auth:
+    name: Auth Tests
+    needs: smoke
     uses: ./.github/workflows/test-suite.yml
     with:
-      suite: e2e
+      suite: auth
+      judge_mode: ${{ inputs.judge_mode || 'simple' }}
+
+  crud:
+    name: CRUD Tests
+    needs: auth
+    uses: ./.github/workflows/test-suite.yml
+    with:
+      suite: crud
+      judge_mode: ${{ inputs.judge_mode || 'simple' }}
+
+  workflow:
+    name: Workflow Tests
+    needs: crud
+    uses: ./.github/workflows/test-suite.yml
+    with:
+      suite: workflow
       judge_mode: ${{ inputs.judge_mode || 'simple' }}

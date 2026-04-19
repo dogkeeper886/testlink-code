@@ -44,83 +44,131 @@ export class LLMJudge {
   }
 
   /**
-   * Build structured JSON prompt for LLM evaluation of a single test.
+   * Build the system + user messages for LLM evaluation of a single test.
+   *
+   * Per-test framing comes from the YAML, not from this file:
+   *   - objective    — what the test proves and why it matters
+   *   - judgeContext — what evidence the steps produce and what silent
+   *                    failures look like in this domain
+   *   - criteria     — pass/fail conditions
+   * The system message defines the role, the mission ("hunt silent failures"),
+   * and the output schema. It does not encode mechanical rules like "exit
+   * code 0 = pass" — those are the test author's call, expressed in the
+   * judgeContext / criteria.
    */
-  private buildPrompt(result: TestResult): string {
+  private buildPrompt(result: TestResult): { system: string; user: string } {
     const r = result;
 
-    const steps = r.steps.map((step, j) => {
+    const system = [
+      `# ROLE`,
+      `You are a senior QA engineer reviewing one automated test run for ${CONFIG.projectName}.`,
+      ``,
+      `# MISSION`,
+      `Decide whether the test PASSED or FAILED. The author of the test has provided:`,
+      `- OBJECTIVE: what the test is trying to prove and why it matters.`,
+      `- CONTEXT:   what each step is supposed to produce, and what silent failures look like in this domain.`,
+      `- CRITERIA:  the pass/fail conditions for this specific test.`,
+      `- OBSERVATIONS: what actually happened (commands, exit codes, stdout, stderr, container logs).`,
+      `Read the OBJECTIVE and CONTEXT first to understand what you are looking at.`,
+      `Then read the CRITERIA to know what counts as success.`,
+      `Then read the OBSERVATIONS and decide whether the criteria were met.`,
+      `Apply judgment, not pattern matching: a step that exits 0 can still be a silent failure if the output shows it skipped its real work; a step that exits non-zero can be a pass if the criteria expected an error.`,
+      ``,
+      `# OUTPUT`,
+      `Respond with exactly one JSON object — no prose, no code fences, no thinking tokens. Schema:`,
+      `{"testId": string, "pass": boolean, "reason": string, "evidence": string}`,
+      `- testId   : echo the test id from the OBJECTIVE block verbatim.`,
+      `- pass     : true if criteria met, false otherwise.`,
+      `- reason   : one short sentence (<= 25 words) grounded in the observations.`,
+      `- evidence : the exact line(s) from OBSERVATIONS that drove the verdict; required when pass is false, otherwise "".`,
+      ``,
+      `Example pass : {"testId":"TC-X-001","pass":true,"reason":"Login page returned the expected 'Login' marker.","evidence":""}`,
+      `Example fail : {"testId":"TC-X-002","pass":false,"reason":"Build appeared to succeed but skipped composer install.","evidence":"CACHED [stage 3/5]"}`,
+    ].join('\n');
+
+    const stepsBlock = r.steps.map((step, j) => {
       const stepDef = r.testCase.steps[j];
-      return {
-        name: step.name,
-        command: step.command.trim(),
-        exit_code: step.exitCode,
-        duration_ms: step.duration,
-        timeout_ms: stepDef?.timeout || r.testCase.timeout,
-        stdout: this.truncate(step.stdout, CONFIG.llm.stdoutLimit),
-        stderr: this.truncate(step.stderr, CONFIG.llm.stderrLimit),
-      };
-    });
+      const limit = stepDef?.timeout || r.testCase.timeout;
+      const stdout = this.truncate(step.stdout, CONFIG.llm.stdoutLimit).trim() || '(empty)';
+      const stderr = this.truncate(step.stderr, CONFIG.llm.stderrLimit).trim() || '(empty)';
+      return [
+        `Step ${j + 1}: ${step.name}`,
+        `  command   : ${step.command.trim().split('\n').join(' \\n ')}`,
+        `  exit_code : ${step.exitCode}`,
+        `  duration  : ${step.duration}ms (timeout ${limit}ms)`,
+        `  stdout    : ${stdout}`,
+        `  stderr    : ${stderr}`,
+      ].join('\n');
+    }).join('\n\n');
 
-    const promptData = {
-      role: `You are a test result evaluator for ${CONFIG.projectName}. Analyze the test execution data and determine if the test passed or failed.`,
-      rules: [
-        'Check step stdout for error responses (e.g. {"error":"..."} means FAIL)',
-        'Errors with exit code 0 are still FAIL',
-        'For AI-generated text, accept reasonable variations',
-        'Long durations within timeout are acceptable',
-        'Focus on semantic correctness, not formatting differences',
-      ],
-      test: {
-        id: r.testCase.id,
-        name: r.testCase.name,
-        suite: r.testCase.suite,
-        goal: r.testCase.goal || r.testCase.name,
-        criteria: r.testCase.criteria,
-        timeout_ms: r.testCase.timeout,
-        duration_ms: r.totalDuration,
-      },
-      steps,
-      container_logs: this.truncate(r.logs, CONFIG.llm.logsLimit),
-      respond: {
-        format: 'Respond with a single JSON object',
-        fields: {
-          testId: r.testCase.id,
-          pass: 'true if test meets all criteria, false otherwise',
-          reason: 'Brief explanation of your verdict',
-          evidence: 'Required if pass is false — the exact stdout content or log line that caused failure',
-        },
-      },
-    };
+    const logs = this.truncate(r.logs, CONFIG.llm.logsLimit).trim() || '(none)';
+    const objective = (r.testCase.objective || r.testCase.goal || r.testCase.name).trim();
+    const judgeContext = (r.testCase.judgeContext || '').trim() ||
+      `(none provided — read the criteria carefully and watch for silent failures: steps that exited 0 but did not actually achieve the test's objective.)`;
+    const criteria = (r.testCase.criteria || '(none provided)').trim();
 
-    const prompt = JSON.stringify(promptData, null, 2);
+    const user = [
+      `# OBJECTIVE`,
+      `Test id   : ${r.testCase.id}`,
+      `Suite     : ${r.testCase.suite}`,
+      `Name      : ${r.testCase.name}`,
+      ``,
+      objective,
+      ``,
+      `# CONTEXT`,
+      judgeContext,
+      ``,
+      `# CRITERIA`,
+      criteria,
+      ``,
+      `# OBSERVATIONS`,
+      `Total duration: ${r.totalDuration}ms (test timeout ${r.testCase.timeout}ms)`,
+      ``,
+      stepsBlock,
+      ``,
+      `## Container logs`,
+      logs,
+      ``,
+      `# VERDICT`,
+      `Return the JSON object specified in the system message. Use testId="${r.testCase.id}".`,
+    ].join('\n');
 
-    // Log prompt stats
     const totalStdout = r.steps.reduce((sum, s) => sum + s.stdout.length, 0);
     const totalStderr = r.steps.reduce((sum, s) => sum + s.stderr.length, 0);
     process.stderr.write(`  [LLM] Prompt for ${r.testCase.id}: logs ${r.logs.length} chars, stdout ${totalStdout} chars, stderr ${totalStderr} chars\n`);
-    process.stderr.write(`  [LLM] Prompt size: ${prompt.length} chars\n`);
+    process.stderr.write(`  [LLM] Prompt size: system ${system.length} + user ${user.length} = ${system.length + user.length} chars\n`);
 
-    return prompt;
+    return { system, user };
   }
 
   /**
    * Judge a single test result.
    */
   private async judgeOne(result: TestResult): Promise<Judgment> {
-    const prompt = this.buildPrompt(result);
+    const { system, user } = this.buildPrompt(result);
     const testId = result.testCase.id;
 
     const response = await axios.post(
-      `${this.ollamaUrl}/api/generate`,
+      `${this.ollamaUrl}/api/chat`,
       {
         model: this.model,
-        prompt,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
         stream: false,
         format: 'json',
         options: {
           temperature: 0.1,
-          num_predict: 1024,
+          // Default context is 4096 tokens — our multi-step prompts can
+          // hit ~5000-7000 and Ollama silently truncates the END of the
+          // prompt (which is where OBSERVATIONS live). 8192 fits every
+          // current test with headroom; raise if logsLimit/stdoutLimit grow.
+          num_ctx: 8192,
+          // Output cap: a typical verdict is 50-200 tokens, but FAIL
+          // verdicts may quote 5-10 lines of evidence. 512 covers honest
+          // verbosity with headroom; well below "the model went rogue".
+          num_predict: 512,
         },
       },
       {
@@ -128,7 +176,7 @@ export class LLMJudge {
       }
     );
 
-    const responseText = response.data.response;
+    const responseText = response.data.message?.content ?? '';
     const promptTokens = response.data.prompt_eval_count ?? '?';
     const responseTokens = response.data.eval_count ?? '?';
     process.stderr.write(`  [LLM] Tokens for ${testId}: prompt=${promptTokens}, response=${responseTokens}\n`);
@@ -217,6 +265,9 @@ export class LLMJudge {
   async unloadModel(): Promise<void> {
     try {
       process.stderr.write(`  [LLM] Unloading judge model ${this.model}...\n`);
+      // Use /api/generate (not /api/chat) for the unload — it doesn't need
+      // conversational semantics and an empty messages[] is awkward.
+      // keep_alive=0 is the documented Ollama unload pattern.
       await axios.post(
         `${this.ollamaUrl}/api/generate`,
         {

@@ -215,6 +215,8 @@ export class TestLoader {
       dependencies: Array.isArray(raw.dependencies) ? raw.dependencies : [],
       steps,
       goal: typeof raw.goal === 'string' ? raw.goal : undefined,
+      objective: typeof raw.objective === 'string' ? raw.objective : undefined,
+      judgeContext: typeof raw.judgeContext === 'string' ? raw.judgeContext : undefined,
       criteria: typeof raw.criteria === 'string' ? raw.criteria : '',
     };
   }

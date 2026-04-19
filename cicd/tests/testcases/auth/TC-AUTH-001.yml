@@ -1,0 +1,47 @@
+id: TC-AUTH-001
+name: checkDevKey accepts the admin API key
+suite: auth
+priority: 1
+timeout: 30000
+dependencies:
+  - TC-SMOKE-002
+
+steps:
+  - name: tl.checkDevKey with valid key
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.checkDevKey</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|true"
+
+objective: |
+  Confirm the admin API key seeded by init-db.sh is accepted by
+  tl.checkDevKey, proving the auth path works for the canonical admin
+  identity. Every CRUD and workflow test depends on this key being usable.
+
+judgeContext: |
+  Step 1 sends `tl.checkDevKey` with the seeded admin key
+  (passed in as `{{devKey}}` from TL_DEV_KEY in cicd/tests/.env, matching
+  what init-db.sh seeded into the users table) via cicd/scripts/xmlrpc-capture.sh.
+  The helper mirrors the raw XML response to stderr; on success the
+  stdout JSON envelope is `{"ok": true}`.
+
+  A healthy response is an XML-RPC methodResponse containing
+  `<boolean>1</boolean>` — the canonical XML-RPC representation of true.
+
+  Silent failures to watch for:
+  - Server returns `<boolean>0</boolean>` — admin key is being rejected
+    (likely a DB seed problem); this would fail the expectPattern but
+    looks like a "valid response" superficially.
+  - Server returns a fault response with text that happens to include
+    "true" somewhere.
+  - Auth bypassed entirely — every key returns true (would also pass
+    here but should fail TC-AUTH-002, which is the negative pair).
+
+criteria: |
+  PASS when the XML response contains <boolean>1</boolean> (or the literal
+  word "true" in the response).
+  FAIL on <boolean>0</boolean>, a fault envelope, or no response.

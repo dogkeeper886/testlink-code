@@ -1,7 +1,6 @@
 id: TC-BUILD-001
 name: PHP Syntax Check
 suite: build
-goal: Verify PHP files have no syntax errors using the Docker image
 priority: 1
 timeout: 180000
 dependencies:
@@ -28,7 +27,39 @@ steps:
       - "Parse error"
       - "Fatal error"
 
+objective: |
+  Confirm every PHP source file in lib/ and cfg/ passes `php -l` syntax
+  check against the PHP version baked into the Docker image. Catches
+  syntax breakage before it reaches runtime.
+
+judgeContext: |
+  Both steps run `docker run --rm testlink-ci-test find ... -exec php -l`
+  against directories baked into the image (`/var/www/html/lib` and
+  `/var/www/html/cfg`). The find/-exec pattern lints every .php file in
+  one process tree.
+
+  We pipe through `tail -5` so only the last few lines reach stdout —
+  per-file "No syntax errors detected" lines are expected on every file,
+  so the tail catches the final files plus any error that ended the run.
+
+  A clean output is several "No syntax errors detected" lines.
+  A failure prints "Parse error: ..." or "PHP Fatal error: ..." with
+  file path and line number.
+
+  Silent failures to watch for:
+  - find found no .php files (e.g. directory typo or empty mount). Stdout
+    would be empty — no "No syntax errors detected" but also no error.
+    expectPatterns catches this as a fail (missing the expected string),
+    but worth noting in your verdict reason if it's the cause.
+  - tail truncated the actual error and only kept clean tail lines from
+    later files. Less likely with -exec because php -l prints
+    deterministic per-file output.
+  - php binary missing in the image — would surface as "/bin/sh: php:
+    not found" in stderr, very obvious.
+
 criteria: |
-  Verify PHP source files have no syntax errors:
-  - php -l runs inside the Docker container on lib/ and cfg/ files
-  - No parse errors or fatal errors detected
+  PASS when both steps' stdout contains "No syntax errors detected" and
+  neither contains "Parse error" or "Fatal error".
+
+  FAIL on any parse/fatal error, or on empty output (suggesting find
+  matched nothing).

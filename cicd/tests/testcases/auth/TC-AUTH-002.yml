@@ -1,0 +1,58 @@
+id: TC-AUTH-002
+name: checkDevKey rejects an invalid API key
+suite: auth
+priority: 2
+timeout: 30000
+dependencies:
+  - TC-SMOKE-002
+
+steps:
+  - name: tl.checkDevKey with bogus key
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.checkDevKey</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>not-a-real-key-{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "faultCode|invalid|2000"
+
+objective: |
+  Confirm the auth layer explicitly rejects unknown API keys with a fault
+  response. The point is to detect a security regression where a bad key
+  silently passes — that would defeat every other auth-protected test.
+
+judgeContext: |
+  THIS IS A NEGATIVE TEST — the EXPECTED outcome is a fault response, not
+  a success envelope. An error here is the desired result, not a failure.
+
+  Step 1 sends `tl.checkDevKey` with a deliberately bogus key
+  (`not-a-real-key-<runId>`). The server should return an XML-RPC <fault>
+  envelope with faultCode 2000 and a message containing "invalid".
+
+  The xmlrpc-capture.sh helper produces:
+  - stdout: `{"ok": false, "faultCode": 2000}` on the expected fault path
+  - stderr: the raw <fault><value><struct>...faultCode 2000...</struct>
+    envelope, which is what expectPatterns matches against
+
+  A pass for this test means the rejection happened with a real fault
+  envelope. Compare the OBSERVATIONS to the criteria below — do not let
+  the words "ok": true in the stdout JSON mislead you; that JSON wraps
+  the HTTP request, not the auth verdict.
+
+  Silent failures to watch for:
+  - Server returns `<boolean>1</boolean>` for a bogus key — this is the
+    nightmare case (silent acceptance of bad credentials). FAIL hard.
+  - Server returns `<boolean>0</boolean>` (rejection but no fault) — this
+    is a partial regression; the rejection is too quiet. FAIL.
+  - HTTP 200 with empty body or HTML error page — auth layer crashed,
+    can't tell what it would have decided. FAIL.
+
+criteria: |
+  PASS when the response (stderr) contains a faultCode (typically 2000)
+  with a message indicating the key is invalid. The fault envelope is
+  what we want to see.
+
+  FAIL when the bogus key is silently accepted (<boolean>1</boolean>),
+  silently rejected without a fault (<boolean>0</boolean>), or the
+  response is missing/malformed.

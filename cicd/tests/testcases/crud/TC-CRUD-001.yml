@@ -1,0 +1,87 @@
+id: TC-CRUD-001
+name: Test project CRUD
+suite: crud
+priority: 1
+timeout: 60000
+dependencies:
+  - TC-AUTH-001
+
+steps:
+  - name: Create test project
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>P{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      projectId: "id"
+
+  - name: Read project back by name
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getTestProjectByName</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "proj-{{testId}}-{{runId}}"
+
+  - name: Delete project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>P{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+objective: |
+  Confirm the Test Project entity supports the full create-read-delete
+  lifecycle via XML-RPC. Project is the root entity in the TestLink
+  hierarchy, so this CRUD must work before suites or cases can be tested.
+
+judgeContext: |
+  Three steps, each via xmlrpc-capture.sh:
+  1. Create — calls tl.createTestProject with a unique name derived from
+     {{testId}}-{{runId}}. Successful response contains <name>id</name>
+     followed by the new project ID; the helper captures it as projectId.
+  2. Read  — calls tl.getTestProjectByName with the same unique name.
+     Successful response contains the project name string verbatim,
+     proving the entity round-trips.
+  3. Delete — calls tl.deleteTestProject by prefix (P<runId>). Successful
+     response contains <boolean>1</boolean> or status:true.
+
+  Each helper invocation puts the raw XML response in stderr (where
+  expectPatterns matches) and a JSON envelope in stdout. A `{"ok": true,
+  "id": N}` stdout means the XML-RPC call returned a value; a `{"ok":
+  false, "faultCode": N}` means a fault was returned.
+
+  Silent failures to watch for:
+  - Read step matches the expected name pattern but the response actually
+    contains a *different* project that happens to share part of the
+    name. The expected pattern is the full proj-<testId>-<runId> string,
+    so an exact substring match here is meaningful.
+  - Delete returns true but a stale project with the same prefix from a
+    prior aborted run is what got deleted (the new one persists). With
+    runId in the prefix this is unlikely but worth noting.
+  - Create reports success with no <name>id</name> pair (envelope
+    structure changed) — would fail expectPattern but read carefully.
+
+criteria: |
+  PASS when:
+  - Step 1 stdout shows {"ok": true, "id": <number>} and stderr contains
+    <name>id</name>.
+  - Step 2 stderr contains the literal string "proj-{{testId}}-{{runId}}".
+  - Step 3 stderr contains <boolean>1</boolean>.
+
+  FAIL on any fault envelope, missing entity ID, name mismatch, or
+  failed deletion.

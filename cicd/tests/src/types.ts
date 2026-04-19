@@ -44,8 +44,17 @@ export interface TestCase {
   steps: TestStep[];
   /** Human-readable criteria for LLM judge evaluation */
   criteria: string;
-  /** Short goal statement for LLM judge context (optional) */
+  /** Short goal statement for LLM judge context (optional, legacy — prefer objective) */
   goal?: string;
+  /** One-paragraph plain-English objective: what this test proves and why it matters */
+  objective?: string;
+  /**
+   * Situational framing for the LLM judge: what kind of evidence each step
+   * produces, what success looks like in the output, and what silent failures
+   * to watch for. Lets the judge interpret logs in context instead of
+   * mechanically checking exit codes.
+   */
+  judgeContext?: string;
 }
 
 // ============================================
@@ -231,8 +240,8 @@ export interface RunConfig {
   outputFormat: 'console' | 'json';
   /** Working directory (project root) */
   workingDir: string;
-  /** Path to docker-compose directory for log collection */
-  dockerComposePath: string;
+  /** Absolute path to the compose file used for log collection */
+  composeFile: string;
 }
 
 /**

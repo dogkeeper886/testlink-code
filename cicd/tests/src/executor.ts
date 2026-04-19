@@ -203,7 +203,14 @@ export class TestExecutor {
 
     this.currentTest++;
     this.currentTestId = testCase.id;
-    this.variables = {};
+    this.variables = {
+      runId: Date.now().toString(),
+      testId: testCase.id,
+      // Admin API key, sourced from cicd/tests/.env (TL_DEV_KEY) and matching
+      // what init-db.sh seeded. Default mirrors the seed default so tests
+      // keep working if the env var is unset.
+      devKey: process.env.TL_DEV_KEY || 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
+    };
     this.progress(
       `[${timestamp}] [${this.currentTest}/${this.totalTests}] ${testCase.id}: ${testCase.name}`
     );
@@ -230,10 +237,16 @@ export class TestExecutor {
       const resolvedStep = { ...step, command: resolvedCommand };
       const result = await this.executeStep(resolvedStep, testCase.timeout);
 
+      const resolvedExpect = step.expectPatterns?.map((p) =>
+        this.substituteVariables(p)
+      );
+      const resolvedReject = step.rejectPatterns?.map((p) =>
+        this.substituteVariables(p)
+      );
       result.patternMatches = this.checkPatterns(
         result,
-        step.expectPatterns,
-        step.rejectPatterns
+        resolvedExpect,
+        resolvedReject
       );
 
       this.captureVariables(step, result);
@@ -325,7 +338,8 @@ ${r.stderr || '(empty)'}
 
     if (needsLogCollector) {
       this.logCollector = new LogCollector(
-        this.config.dockerComposePath,
+        this.config.composeFile,
+        this.config.workingDir,
         this.config.outputDir
       );
       try {

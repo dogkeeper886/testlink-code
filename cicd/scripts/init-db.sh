@@ -34,8 +34,9 @@ sed 's|/\*prefix\*/||g' "$SQL_DIR/testlink_create_default_data.sql" | \
   psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -q
 
 # Generate an API key for the admin user (user_id=1)
-# The key is a known value so test cases can use it
-API_KEY="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
+# The key is a known value so test cases can use it. Override via TL_DEV_KEY
+# (see cicd/tests/.env); ci-up.sh forwards the env var into this exec.
+API_KEY="${TL_DEV_KEY:-a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4}"
 echo "Setting admin API key..."
 psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -q -c \
   "UPDATE users SET script_key='$API_KEY' WHERE id=1;"
