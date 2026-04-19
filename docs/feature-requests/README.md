@@ -1,0 +1,45 @@
+# Feature Requests
+
+Durable design records for non-trivial changes. Each feature request (FR) is a markdown document paired with a GitHub issue.
+
+## Why both?
+
+| | GitHub issue | FR document |
+|---|---|---|
+| Lives where | github.com | repo (versioned) |
+| Editable by | issue commenters | PR review |
+| Carries | status, assignment, conversation | decisions, tradeoffs, rationale |
+| Survives | as long as the issue tracker exists | as long as the code does |
+
+The issue is the conversation surface. The FR is the design record that travels with the code. Both must link to each other.
+
+## Naming
+
+`FR-NNN-<slug>.md`
+
+- `NNN` — zero-padded 3-digit sequence number, never reused.
+- `<slug>` — lowercase, hyphens, ~6 words max, no articles or generic verbs.
+
+Numbering is independent of GitHub issue numbers. One FR can spawn multiple issues; one issue may not deserve an FR.
+
+## Lifecycle
+
+```
+draft  →  proposed  →  accepted  →  in-progress  →  done
+                                                 ↘  rejected
+                              ↘ superseded (any state → newer FR replaces it)
+```
+
+The `status` field in the FR's YAML frontmatter is authoritative. Update it as the work progresses.
+
+## Authoring
+
+Use the [`feature-request` skill](https://docs.claude.com/en/docs/claude-code/skills) (when working with Claude Code), or copy [`_template.md`](./_template.md) and fill in the sections. The skill produces both the FR doc and the GitHub issue and links them automatically.
+
+## Index
+
+| FR | Title | Status | Issue |
+|---|---|---|---|
+| [FR-001](./FR-001-extend-functional-test-coverage.md) | Extend functional test coverage | draft | [#7](https://github.com/dogkeeper886/testlink-code/issues/7) |
+| [FR-002](./FR-002-delete-build-and-remove-test-case-from-test-plan.md) | Add `deleteBuild` and `removeTestCaseFromTestPlan` | draft | [#8](https://github.com/dogkeeper886/testlink-code/issues/8) |
+| [FR-003](./FR-003-requirement-spec-and-requirement-crud.md) | Add Requirement Spec + Requirement CRUD | draft | [#9](https://github.com/dogkeeper886/testlink-code/issues/9) |
