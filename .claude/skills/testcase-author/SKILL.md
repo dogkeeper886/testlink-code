@@ -5,15 +5,21 @@ description: Think through a CI testcase. In authoring mode, produces a new YAML
 
 # Testcase authoring and review
 
-A testcase is a claim about the system plus the evidence that proves the claim. Three YAML fields are the claim surface:
+A testcase is judged by two judges with different jobs. Getting the division of labor right is the first thing a good author does.
 
+- **Simple judge (regex)** — literal character matching. Its contract is each step's `expectPatterns`. Use this for any claim you can state as a substring.
+- **LLM judge (semantic)** — the common-sense read a human QA would bring. Its contract is the test-level `objective` / `judgeContext` / `criteria`. Use this for the part of the claim that only a human-like read catches — silent failures where regex passes but the result is wrong.
+
+They are complementary, not redundant. Writing test-level `criteria` that restate regex patterns forces the LLM into the simple judge's role, where it performs worse (hallucinations, long-context drift). The canonical guide at `cicd/tests/TESTCASE_AUTHORING.md` explains this division; read it first.
+
+The four fields at a glance:
+
+- Step-level `expectPatterns` — literal substrings the regex enforces.
 - `objective` — the claim, in terms a product stakeholder would recognize.
-- `judgeContext` — the domain knowledge a new colleague would need to interpret the evidence. Not a step narration; the YAML already has that.
-- `criteria` — the observable in the logs that proves or disproves the claim. Specific fragments, not vague success-words.
+- `judgeContext` — the domain knowledge a new colleague would need to interpret the evidence. Not a step narration.
+- `criteria` — pass/fail narrated the way a human colleague would describe it over your shoulder. Not a repeat of the regex patterns.
 
-All three fields, plus the `expectPatterns` on each step, are read by both a regex-matching simple judge and an LLM semantic judge. They are the test-specific prompt to the judge.
-
-This skill guides the reasoning; it does not hand over a template. Fill-in-the-blank tests end up describing themselves instead of teaching the judge anything.
+This skill guides the reasoning; it does not hand over a template. Fill-in-the-blank tests end up describing themselves instead of teaching the judges anything.
 
 ## Deliverables
 
@@ -40,10 +46,11 @@ Don't open the editor until these are answered.
 4. **What would a new colleague — who has never seen this API — need to interpret these logs correctly?**
    That's the judgeContext. Teach only what's needed for *these* logs, not the whole system.
 
-The three fields then write themselves:
+The fields then write themselves — split between the two judges:
+- `expectPatterns` (per-step, simple judge) ← the literal substrings from (3).
 - `objective` ← (1), plus one phrase on what regression it protects against.
-- `criteria` ← (3), tightened to exact observable fragments.
 - `judgeContext` ← (4).
+- `criteria` ← narrated pass/fail (how a human would describe the outcome over your shoulder), NOT a repeat of the substring patterns. The substrings belong in `expectPatterns`.
 
 After the YAML is drafted, run `bash cicd/scripts/run-tests.sh --suite <suite>`. If both judges pass on first run, the authoring is likely sound. If the LLM judge flags the test for a reason the evidence doesn't actually show, the gap is in the judgeContext — add the *domain fact* the judge is missing, not a correction addressed to the judge.
 
@@ -64,12 +71,13 @@ Only after the warm-up, walk the fields with these questions.
 - Does `judgeContext` add something the steps don't already show? Or does it retell what the YAML already says?
 - Could a new colleague read the logs + judgeContext and interpret them without asking the author?
 
-### Are the criteria precise?
-- If any criterion has regex alternation (`A|B`), does each alternative independently prove the claim? Or is one alternative a field that's present in *both* correct and regressed states?
-- Do the criteria name the exact fragment at the exact field path, or use vocabulary like *success*, *passed*, *valid*?
+### Are the simple-judge and LLM-judge assertions in their right places?
+- Step `expectPatterns` should carry the literal substrings — the character-exact, regex-enforceable claims. A missing substring there is a real regex finding.
+- Test-level `criteria` should narrate pass/fail for a human reader, not restate the substrings. If the `criteria` field reads like a list of regex patterns with field paths, that's a finding: the claim has been pushed to the wrong judge. The LLM judge gets worse when forced into the regex's role.
+- If `expectPatterns` alternates on `A|B`, each alternative must independently prove the claim — otherwise a fault response that happens to include one of the fields will pass silently.
 
-### Are the three fields doing different work?
-- `objective` states the claim. `criteria` name the observable. `judgeContext` adds interpretive context.
+### Are the three test-level fields doing different work?
+- `objective` states the claim. `judgeContext` adds interpretive context (domain knowledge). `criteria` narrates pass/fail in human terms.
 - Do they overlap or restate each other? Each should be doing its own job.
 - Together they should be shorter than the steps block, not longer.
 

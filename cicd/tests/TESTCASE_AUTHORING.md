@@ -1,20 +1,38 @@
 # Authoring testcases — a thinking guide
 
-When you write a testcase, you're not just running commands. You're asking the LLM judge a question: *did this test prove what it was meant to prove?* The three fields `objective`, `judgeContext`, and `criteria` are how you pose that question. Together they are the test-specific prompt the judge receives.
-
-Good testcases think clearly about three different things in three different fields. Bad testcases mash them together or describe the YAML back to itself.
+When you write a testcase, you're writing for two judges with different jobs. Getting the division of labor wrong is the most common mistake; understanding it is the first thing.
 
 This guide is about the thinking, not a template. For mechanics (framework lifecycle, dynamic IDs, teardown), see [`TESTING_GUIDELINES.md`](./TESTING_GUIDELINES.md).
 
 ---
 
-## What the judge has and what it lacks
+## The two judges, and what each is for
 
-The judge receives:
-- The evidence — raw stdout, stderr, and container logs from every step that ran.
-- Your three fields: objective, judgeContext, criteria.
+Every test run is evaluated by both judges. A test is green only when both agree.
 
-The judge does **not** receive:
+**Simple judge — regex.** Fast, literal, never hallucinates. Its job is to enforce *the exact character sequence X must appear in the evidence*. Configured per-step via `expectPatterns`. Use it for any claim you can state as a literal substring.
+
+**LLM judge — semantic.** The common-sense read of the logs a human QA engineer would bring. Its job is to catch *silent failures where the regex passes but the result is wrong*: counters that look populated but are all zeros; a build that completed mid-stream without an explicit error; a status field with adjacent values that don't make sense. Configured per-test via `objective`, `judgeContext`, `criteria`.
+
+These are complementary, not redundant. **The simple judge's exactness frees the LLM judge to do what only it can** — apply general engineering judgment to output it's seeing for the first time. Writing LLM-facing `criteria` that restate what the regex already checks forces the LLM into the simple judge's role, where it performs worse (hallucinations, long-context drift, off-by-one substring misses).
+
+A useful check while writing: *would I describe this pass/fail condition the same way to a human colleague reading the log over my shoulder?* If yes, it belongs in `criteria` (LLM-facing). If instead you'd point to a specific substring, it belongs in `expectPatterns` on the relevant step (regex-facing).
+
+---
+
+## What each judge has
+
+**Simple judge has:**
+- Each step's stdout and stderr.
+- The `expectPatterns` array you defined for that step.
+- Nothing else. It does not read `objective` / `judgeContext` / `criteria`.
+
+**LLM judge has:**
+- The same evidence (truncated to the framework's limits).
+- The three YAML fields: `objective`, `judgeContext`, `criteria`.
+- A system prompt that defines its role.
+
+**The LLM judge does NOT have:**
 - Domain knowledge about TestLink. It doesn't know what `<boolean>1</boolean>` means in a `tl.checkDevKey` response. It doesn't know that `testplan_tcversions` rows are what "attached" looks like. You have to teach it.
 - The reason the test exists. It can read the YAML, but "what this test proves" is editorial — it comes from you.
 
@@ -49,13 +67,15 @@ Things that do **not** belong here:
 - Speculation about things that *could* go wrong but aren't specifically detectable from the evidence. Vague warnings prime the judge to hallucinate.
 - Instructions to the judge about how to reason. The judge's role is set at the framework level, not in your YAML.
 
-### `criteria` — *what specific observation proves or disproves the claim?*
+### `criteria` — *what does pass look like, narrated for a human?*
 
-Concrete, visible-in-the-evidence conditions. If a human read the logs and the criteria, they should be able to run the check themselves without consulting you.
+Plain-language pass/fail description. Read by the LLM judge, not the regex. If a human QA engineer were reading the logs over your shoulder, this is the running commentary you'd give them: *"the plan totals show one passing execution was counted"*, *"the fault envelope carries a real faultCode, not a silent zero-boolean"*, *"the build completed and the image was registered under the expected tag"*.
 
-Ask yourself: *what's the most specific pattern that distinguishes this test's success from the adjacent failure modes?*
+Ask yourself: *how would I describe this test's pass condition to a colleague?* If your answer is "stderr contains substring X at position Y" — that's simple-judge language; put it in the relevant step's `expectPatterns` instead. Save `criteria` for the semantic claim.
 
-Good criteria name the exact fragment you're looking for in the exact place you expect it. Vague criteria ("status is passed", "counters are populated") hide false-positives.
+Vague `criteria` ("the test should succeed", "the response looks reasonable") is too weak — it doesn't give the LLM anything concrete to anchor on. Over-specific `criteria` ("stderr contains exactly `<string>p</string>` at byte offset 465") forces the LLM into the regex's role. The sweet spot is narrated claims with just enough specificity that a human reader could verify them from the log alone.
+
+**Regex-facing patterns belong in each step's `expectPatterns`:** this is where literal fragments go. The simple judge enforces those character-for-character, fast and exactly. The LLM judge does not see them directly — it sees the evidence and your `criteria`, and independently forms a judgment.
 
 ---
 
@@ -65,25 +85,34 @@ Suppose you're writing a test that reports a failing execution and reads it back
 
 **Thinking, before writing:**
 
-- *Claim I'm making:* `reportTCResult` correctly persists a failing status, and the read-back API reflects it. If this regressed, dashboards would show wrong counts for failing test runs — a direct product regression.
-- *What the evidence looks like:* `reportTCResult` returns an XML-RPC response with `status:true` and the new execution id. `getLastExecutionResult` returns a struct whose `status` field is a single-char code (`p` / `f` / `b`). The failing case emits `<member><name>status</name><value><string>f</string></value></member>` — exactly that fragment.
-- *Domain knowledge the judge needs:* single-char status codes. Which call's response is which. That `<string>f</string>` alone could appear in many contexts; the element path matters.
-- *The observable that proves correctness:* the literal fragment `<name>status</name><value><string>f</string></value>` in the stderr of the read-back step.
+- *Claim I'm making:* `reportTCResult` persists a failing status, and the read-back API reflects it. If this regressed, dashboards would show wrong counts for failing test runs — a direct product regression.
+- *What the evidence looks like:* `reportTCResult` returns an XML-RPC response with `status:true` and the new execution id. `getLastExecutionResult` returns a struct whose `status` field is a single-char code (`p` / `f` / `b`). The failing case emits `<member><name>status</name><value><string>f</string></value></member>`.
+- *What the regex must enforce (simple judge work):* the literal fragment `<name>status</name><value><string>f</string></value>` has to appear in the read-back step's stderr. That's a substring check — no judgment needed, and the judgment-free check is fast and certain.
+- *What only a human-like read will catch (LLM judge work):* a response shape that says `status:true` but with a surrounding envelope that actually carries a warning or degraded state. A status code of `f` written inside an `additionalInfo` block instead of the top-level result. Anything where the regex says "yes" but a human would say "wait, that's not right."
+- *Domain knowledge the judge needs:* that TestLink uses single-char status codes, that the path matters (`f` alone could appear as a substring elsewhere), that the read-back step is where the assertion lives.
 
-**What makes it into the three fields:**
+**What makes it into the three fields plus the step:**
+
+The step's `expectPatterns`:
+```yaml
+expectPatterns:
+  - "<name>status</name><value><string>f</string>"
+```
+That's the regex-facing assertion. Character-exact, fast, no hallucination.
 
 `objective`:
 > Verify that `reportTCResult` persists a failing status and that `getLastExecutionResult` reads it back correctly. A regression here would cause TestLink's execution dashboards and counter APIs to under-report failures — silently green release reports that should be red.
 
 `judgeContext`:
-> The evidence consists of two XML-RPC responses: one from `reportTCResult` (step N), one from `getLastExecutionResult` (step M). TestLink encodes execution status as a single character: `p` (passed), `f` (failed), `b` (blocked), or an empty string when no execution exists. The relevant fragment in the read-back response is `<name>status</name><value><string>f</string></value>` — the element path matters because "f" alone can appear elsewhere (e.g. a substring of "Success", field names).
+> The evidence consists of two XML-RPC responses: one from `reportTCResult` (a report acknowledgement), one from `getLastExecutionResult` (the read-back). TestLink encodes execution status as a single character: `p` (passed), `f` (failed), `b` (blocked), empty for no-execution. The read-back response is the source of truth — if it carries `status=f`, the failure was persisted correctly.
 
 `criteria`:
-> - Step N stdout contains `{"ok": true, "id": <number>}`.
-> - Step M stderr contains the literal fragment `<name>status</name><value><string>f</string></value>`.
-> - Any fault envelope in either step is a failure.
+> Pass: the fail report is acknowledged, and the read-back response shows the same case as failed. A human reading the logs should see both the acknowledgement and the post-report state matching.
+> Fail: the read-back shows a different status, or a fault envelope indicates the report didn't persist.
 
-Notice what's *not* there: no step-by-step narration of what the YAML runs, no list of "things that could go wrong," no formulaic phrases. The author wrote three things they uniquely know: the *claim*, the *domain*, the *observable*.
+Notice what's *not* in the `criteria`: character-level substrings. Those went into `expectPatterns`, where they belong. The `criteria` is narrated for a reader; the regex does the character-level work.
+
+Notice also what's not there: no step-by-step narration of what the YAML runs, no list of "things that could go wrong," no formulaic phrases. The author wrote three things they uniquely know: the *claim*, the *domain*, the *narrated pass/fail*.
 
 ---
 
