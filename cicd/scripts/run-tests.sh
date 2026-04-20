@@ -30,6 +30,16 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
+# Defaults for values .env provides locally but CI runners don't (no .env
+# on the runner — GitHub's checkout skips gitignored files). The ${VAR:-...}
+# pattern preserves precedence: anything the parent shell or .env set wins;
+# the fallback only fires when the variable is unset or empty. Match the
+# literals in ci-up.sh / xmlrpc-capture.sh so CI behaves like a developer
+# laptop with a populated .env.
+export TL_PORT="${TL_PORT:-8091}"
+export TL_URL="${TL_URL:-http://localhost:${TL_PORT}}"
+export TL_DEV_KEY="${TL_DEV_KEY:-a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4}"
+
 ARGS=("$@")
 
 # The build suite lints PHP and builds the image via `docker build`.
