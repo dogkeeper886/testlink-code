@@ -1,0 +1,195 @@
+id: TC-EXEC-004
+name: Delete execution
+suite: execution
+priority: 4
+timeout: 120000
+dependencies:
+  - TC-EXEC-001
+
+steps:
+  - name: Create project (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>E4{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      projectId: "id"
+
+  - name: Create suite (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestSuite</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>testsuitename</name><value><string>suite-{{testId}}-{{runId}}</string></value></member>
+        <member><name>details</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      suiteId: "id"
+
+  - name: Create case (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestCase</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testcasename</name><value><string>case-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testsuiteid</name><value><int>{{suiteId}}</int></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>authorlogin</name><value><string>admin</string></value></member>
+        <member><name>summary</name><value><string>{{testId}}</string></value></member>
+        <member><name>steps</name><value><array><data><value><struct>
+          <member><name>step_number</name><value><int>1</int></value></member>
+          <member><name>actions</name><value><string>noop</string></value></member>
+          <member><name>expected_results</name><value><string>ok</string></value></member>
+        </struct></value></data></array></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      caseId: "id"
+
+  - name: Create plan (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanname</name><value><string>plan-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      planId: "id"
+
+  - name: Attach case to plan (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.addTestCaseToTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>testcaseexternalid</name><value><string>E4{{runId}}-1</string></value></member>
+        <member><name>version</name><value><int>1</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "feature_id|status"
+
+  - name: Create build (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createBuild</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>buildname</name><value><string>build-{{testId}}-{{runId}}</string></value></member>
+        <member><name>buildnotes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      buildId: "id"
+
+  - name: Report passing result; capture execution id
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.reportTCResult</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testcaseid</name><value><int>{{caseId}}</int></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>buildid</name><value><int>{{buildId}}</int></value></member>
+        <member><name>status</name><value><string>p</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "status.*true|id"
+    capture:
+      executionId: "id"
+
+  - name: Delete the execution
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteExecution</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>executionid</name><value><int>{{executionId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Read last execution result; expect no result (deleted)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getLastExecutionResult</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>testcaseid</name><value><int>{{caseId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<int>-1</int>|id_.*-1|has_been_executed.*0"
+
+  - name: Delete plan (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>E4{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+objective: |
+  Confirm that tl.deleteExecution removes a recorded execution row and
+  that tl.getLastExecutionResult reflects the deletion (returns
+  not-found sentinel). This is the correction path — users who report a
+  wrong result need a way to undo.
+
+judgeContext: |
+  tl.deleteExecution is the correction path: when a result has been
+  reported wrong, the execution row can be removed. Once deleted,
+  tl.getLastExecutionResult should indicate that no execution exists
+  for that (plan, case) pair.
+
+  TestLink signals "no execution on record" with a struct whose id
+  field is -1 (the sentinel), sometimes with a has_been_executed=0
+  flag alongside. The shape has varied across TestLink branches, so
+  multiple equivalent sentinels are accepted.
+
+  The execution id for the delete call is captured from reportTCResult's
+  response envelope (the first integer in the response, per
+  xmlrpc-capture.sh's convention — the freshly-created execution's id).
+
+criteria: |
+  Pass: tl.deleteExecution returns boolean 1;
+  then tl.getLastExecutionResult returns id=-1 (the sentinel signalling
+  no execution on record). id=-1 IS the pass observable — it is what
+  "no execution" looks like in the API, not the absence of a response.
+
+  Fail: tl.deleteExecution carries a fault; or the read-back returns
+  a real execution id with a real status (the delete didn't stick).

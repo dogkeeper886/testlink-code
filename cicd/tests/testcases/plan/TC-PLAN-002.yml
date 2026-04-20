@@ -1,0 +1,128 @@
+id: TC-PLAN-002
+name: Build CRUD under plan
+suite: plan
+priority: 2
+timeout: 60000
+dependencies:
+  - TC-PLAN-001
+
+steps:
+  - name: Create parent project (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>PB{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      projectId: "id"
+
+  - name: Create parent test plan (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanname</name><value><string>plan-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      planId: "id"
+
+  - name: Create build under the plan
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createBuild</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>buildname</name><value><string>build-{{testId}}-{{runId}}</string></value></member>
+        <member><name>buildnotes</name><value><string>Created by {{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      buildId: "id"
+
+  - name: List builds for plan and verify our build is there
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getBuildsForTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "build-{{testId}}-{{runId}}"
+
+  - name: Delete build via tl.deleteBuild
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteBuild</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>buildid</name><value><int>{{buildId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete plan (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete parent project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>PB{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+objective: |
+  Confirm the Build entity supports full CRUD under a test plan — create,
+  list, and explicitly delete (using tl.deleteBuild, landed in issue #8).
+  Builds are the version stamp against which executions are recorded; if
+  build CRUD is broken, release-tracking is broken.
+
+judgeContext: |
+  Builds in TestLink belong to a test plan, which belongs to a project —
+  so the test stands up that parent chain before exercising build CRUD.
+  The key step is the explicit tl.deleteBuild call (landed in issue #8);
+  before #8 there was only closeBuild, which marked builds inactive but
+  left the rows in place. This test proves the new delete path removes
+  the build cleanly.
+
+  getBuildsForTestPlan returns a list of build structs for a given plan;
+  each struct carries the build's id, name, notes, and active/closed
+  flags. A freshly-created build appears with active=1.
+
+criteria: |
+  The test creates a build under a plan, lists the builds, then deletes
+  the build by id. A reader looking at the logs should see tl.createBuild
+  return a new build id, tl.getBuildsForTestPlan return a list that
+  contains a build whose name field is "build-TC-PLAN-002-<runId>", and
+  tl.deleteBuild return a boolean success — plus clean teardown of the
+  parent plan and project.
+
+  Fail conditions: the list response from tl.getBuildsForTestPlan does
+  not contain a struct whose name is "build-TC-PLAN-002-<runId>";
+  tl.deleteBuild returns a fault; any fault envelope on setup or
+  teardown.

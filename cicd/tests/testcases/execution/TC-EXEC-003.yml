@@ -1,0 +1,178 @@
+id: TC-EXEC-003
+name: Execution counters per build
+suite: execution
+priority: 3
+timeout: 120000
+dependencies:
+  - TC-EXEC-001
+
+steps:
+  - name: Create project (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>E3{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      projectId: "id"
+
+  - name: Create suite (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestSuite</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>testsuitename</name><value><string>suite-{{testId}}-{{runId}}</string></value></member>
+        <member><name>details</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      suiteId: "id"
+
+  - name: Create case (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestCase</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testcasename</name><value><string>case-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testsuiteid</name><value><int>{{suiteId}}</int></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>authorlogin</name><value><string>admin</string></value></member>
+        <member><name>summary</name><value><string>{{testId}}</string></value></member>
+        <member><name>steps</name><value><array><data><value><struct>
+          <member><name>step_number</name><value><int>1</int></value></member>
+          <member><name>actions</name><value><string>noop</string></value></member>
+          <member><name>expected_results</name><value><string>ok</string></value></member>
+        </struct></value></data></array></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      caseId: "id"
+
+  - name: Create plan (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanname</name><value><string>plan-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      planId: "id"
+
+  - name: Attach case to plan (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.addTestCaseToTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>testcaseexternalid</name><value><string>E3{{runId}}-1</string></value></member>
+        <member><name>version</name><value><int>1</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "feature_id|status"
+
+  - name: Create build (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createBuild</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>buildname</name><value><string>build-{{testId}}-{{runId}}</string></value></member>
+        <member><name>buildnotes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      buildId: "id"
+
+  - name: Report passing result
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.reportTCResult</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testcaseid</name><value><int>{{caseId}}</int></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>buildid</name><value><int>{{buildId}}</int></value></member>
+        <member><name>status</name><value><string>p</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "status.*true|overwrite"
+
+  - name: Get totals for plan; assert one passing execution counted
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getTotalsForTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>exec_qty</name><value><string>1</string>"
+
+  - name: Delete plan (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>E3{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+objective: |
+  Confirm that tl.getTotalsForTestPlan reflects reported execution results.
+  This endpoint backs TestLink's plan-level progress dashboards; if it
+  under-reports, release tracking silently lies.
+
+judgeContext: |
+  tl.getTotalsForTestPlan returns a struct with a with_tester array
+  carrying per-status counter structs keyed by status letter (p, f, b, n).
+  Each counter has an exec_qty field holding the count of executions
+  with that status on the plan. After one passing report, the p bucket
+  carries exec_qty=1; the other status buckets stay at 0.
+
+  Note: tl.getExecCountersByBuild is deliberately not exercised here.
+  In this project's setup it returns build metadata in active_builds
+  but leaves with_tester/total empty regardless of reported executions —
+  not a reliable counter surface. Tracked separately.
+
+criteria: |
+  The test reports one passing execution via tl.reportTCResult, then
+  reads the plan's totals via tl.getTotalsForTestPlan. A reader looking
+  at the totals response should see the 'p' bucket carrying exec_qty=1
+  — the one reported pass was counted.
+
+  Fail conditions: the 'p' bucket reads exec_qty=0; a fault envelope
+  appears on any step; or the totals response is missing the with_tester
+  counter structure entirely.

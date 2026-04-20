@@ -1,0 +1,204 @@
+id: TC-EXEC-002
+name: Record fail then blocked
+suite: execution
+priority: 2
+timeout: 120000
+dependencies:
+  - TC-EXEC-001
+
+steps:
+  - name: Create project (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>E2{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      projectId: "id"
+
+  - name: Create suite (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestSuite</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>testsuitename</name><value><string>suite-{{testId}}-{{runId}}</string></value></member>
+        <member><name>details</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      suiteId: "id"
+
+  - name: Create case (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestCase</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testcasename</name><value><string>case-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testsuiteid</name><value><int>{{suiteId}}</int></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>authorlogin</name><value><string>admin</string></value></member>
+        <member><name>summary</name><value><string>{{testId}}</string></value></member>
+        <member><name>steps</name><value><array><data><value><struct>
+          <member><name>step_number</name><value><int>1</int></value></member>
+          <member><name>actions</name><value><string>noop</string></value></member>
+          <member><name>expected_results</name><value><string>ok</string></value></member>
+        </struct></value></data></array></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      caseId: "id"
+
+  - name: Create plan (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanname</name><value><string>plan-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      planId: "id"
+
+  - name: Attach case to plan (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.addTestCaseToTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>testcaseexternalid</name><value><string>E2{{runId}}-1</string></value></member>
+        <member><name>version</name><value><int>1</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "feature_id|status"
+
+  - name: Create build (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createBuild</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>buildname</name><value><string>build-{{testId}}-{{runId}}</string></value></member>
+        <member><name>buildnotes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      buildId: "id"
+
+  - name: Report failing result
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.reportTCResult</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testcaseid</name><value><int>{{caseId}}</int></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>buildid</name><value><int>{{buildId}}</int></value></member>
+        <member><name>status</name><value><string>f</string></value></member>
+        <member><name>notes</name><value><string>fail by {{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "status.*true|overwrite"
+
+  - name: Read last result; assert status=f
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getLastExecutionResult</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>testcaseid</name><value><int>{{caseId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>status</name><value><string>f</string>"
+
+  - name: Report blocked result
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.reportTCResult</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testcaseid</name><value><int>{{caseId}}</int></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>buildid</name><value><int>{{buildId}}</int></value></member>
+        <member><name>status</name><value><string>b</string></value></member>
+        <member><name>notes</name><value><string>blocked by {{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "status.*true|overwrite"
+
+  - name: Read last result; assert status=b
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getLastExecutionResult</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>testcaseid</name><value><int>{{caseId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>status</name><value><string>b</string>"
+
+  - name: Delete plan (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>E2{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+objective: |
+  Confirm that tl.reportTCResult supports the non-passing statuses (fail,
+  blocked) and that each one is correctly reflected by
+  tl.getLastExecutionResult. A status that silently reverts to passed
+  (or is ignored) would be a severe correctness regression.
+
+judgeContext: |
+  TestLink's execution model is latest-wins: every reportTCResult call
+  for a given (test plan, test case) pair replaces any prior result,
+  and getLastExecutionResult returns only the most recent one. This
+  test exercises that contract by reporting two statuses in sequence
+  and reading after each.
+
+  Status codes are single characters in the response: p (passed),
+  f (failed), b (blocked). They live in the `status` field of the
+  execution struct returned by getLastExecutionResult.
+
+criteria: |
+  Pass: after reportTCResult(f), getLastExecutionResult carries status 'f';
+  after reportTCResult(b), getLastExecutionResult carries status 'b'.
+  Latest-wins: the second read must show 'b', not 'f'.
+
+  Fail: a read-back carries any status other than the one just reported.

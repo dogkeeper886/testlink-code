@@ -12,6 +12,8 @@ export const SUITES = [
   'smoke',
   'auth',
   'crud',
+  'plan',
+  'execution',
   'workflow',
   'negative',
   'regression',

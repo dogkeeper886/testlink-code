@@ -1,0 +1,101 @@
+id: TC-PLAN-001
+name: Test plan CRUD
+suite: plan
+priority: 1
+timeout: 60000
+dependencies:
+  - TC-AUTH-001
+
+steps:
+  - name: Create parent project (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>PP{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      projectId: "id"
+
+  - name: Create test plan
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanname</name><value><string>plan-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>Created by {{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      planId: "id"
+
+  - name: Read plan back by name
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getTestPlanByName</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanname</name><value><string>plan-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "plan-{{testId}}-{{runId}}"
+
+  - name: Delete plan (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete parent project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>PP{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+objective: |
+  Confirm the Test Plan entity supports CRUD under a project. Test Plan is
+  the anchor for every execution activity in TestLink — if plan CRUD is
+  broken, no test can be scheduled, no build can be stamped, no result
+  can be recorded.
+
+judgeContext: |
+  Test plans in TestLink belong to a project, so the test creates a
+  parent project first. Each XML-RPC call goes through
+  cicd/scripts/xmlrpc-capture.sh, which emits a small JSON envelope to
+  stdout ({"ok": true, "id": N} on success, {"ok": false, "faultCode": N}
+  on a fault) and mirrors the raw XML response to stderr.
+
+  The read-back step uses tl.getTestPlanByName, which returns the plan
+  struct including its name — that's how the test confirms the plan
+  actually persisted with the right identity.
+
+criteria: |
+  The test creates a test plan, reads it back by name, then deletes it
+  along with its parent project. A reader looking at the logs should
+  see the tl.createTestPlan call return a new plan id, tl.getTestPlanByName
+  return a plan struct whose name field matches "plan-TC-PLAN-001-<runId>",
+  and tl.deleteTestPlan plus tl.deleteTestProject each return a boolean
+  success.
+
+  Fail conditions: a fault envelope on any step, a read-back whose
+  name field differs from "plan-TC-PLAN-001-<runId>", or teardown
+  that doesn't return a clean boolean success.

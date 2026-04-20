@@ -1,0 +1,216 @@
+id: TC-WORKFLOW-002
+name: Full plan-and-execute lifecycle
+suite: workflow
+priority: 2
+timeout: 180000
+dependencies:
+  - TC-EXEC-001
+
+steps:
+  - name: Create project
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>W2{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      projectId: "id"
+
+  - name: Create test suite
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestSuite</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>testsuitename</name><value><string>suite-{{testId}}-{{runId}}</string></value></member>
+        <member><name>details</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      suiteId: "id"
+
+  - name: Create test case
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestCase</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testcasename</name><value><string>case-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testsuiteid</name><value><int>{{suiteId}}</int></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>authorlogin</name><value><string>admin</string></value></member>
+        <member><name>summary</name><value><string>{{testId}}</string></value></member>
+        <member><name>steps</name><value><array><data><value><struct>
+          <member><name>step_number</name><value><int>1</int></value></member>
+          <member><name>actions</name><value><string>Execute the scenario</string></value></member>
+          <member><name>expected_results</name><value><string>Scenario passes</string></value></member>
+        </struct></value></data></array></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      caseId: "id"
+
+  - name: Create test plan
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanname</name><value><string>plan-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      planId: "id"
+
+  - name: Attach case to plan
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.addTestCaseToTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>testcaseexternalid</name><value><string>W2{{runId}}-1</string></value></member>
+        <member><name>version</name><value><int>1</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "feature_id|status"
+
+  - name: Create build
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createBuild</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>buildname</name><value><string>build-{{testId}}-{{runId}}</string></value></member>
+        <member><name>buildnotes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      buildId: "id"
+
+  - name: Report passing result
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.reportTCResult</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testcaseid</name><value><int>{{caseId}}</int></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>buildid</name><value><int>{{buildId}}</int></value></member>
+        <member><name>status</name><value><string>p</string></value></member>
+        <member><name>notes</name><value><string>executed by {{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "status.*true|overwrite"
+
+  - name: Read last execution and verify passed
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getLastExecutionResult</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>testcaseid</name><value><int>{{caseId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>status</name><value><string>p</string>"
+
+  - name: Delete build (teardown — uses new deleteBuild)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteBuild</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>buildid</name><value><int>{{buildId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Remove case from plan (teardown — uses new removeTestCaseFromTestPlan)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.removeTestCaseFromTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+        <member><name>testcaseid</name><value><int>{{caseId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete plan (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>W2{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+objective: |
+  Exercise the full plan-and-execute lifecycle end-to-end as one flow:
+  create project → suite → case → plan → attach → build → report result →
+  read it back → reverse teardown (delete build, detach case, delete plan,
+  delete project). If the individual TC-PLAN-* and TC-EXEC-* tests pass
+  but this fails, the bug is in cross-entity coordination, not in any
+  single op.
+
+judgeContext: |
+  This is the dynamic-side analogue of TC-WORKFLOW-001 (which covers
+  only the static project→suite→case graph). The claim here is that
+  every layer of the execution workflow — plan creation, case
+  attachment, build stamping, result reporting, and the explicit
+  teardown of each — works correctly when exercised as one continuous
+  sequence, not just per-entity.
+
+  Entity names use a W<runId> prefix so this test can run alongside
+  TC-WORKFLOW-001 and the TC-EXEC-* tests in the same suite invocation
+  without colliding.
+
+  TestLink status codes in the read-back response are single characters:
+  p (passed), f (failed), b (blocked), or empty for no execution.
+
+criteria: |
+  The test walks the entire lifecycle: create the entity graph, build
+  the plan scaffolding, report a pass, read it back, then dismantle
+  everything in reverse. A reader looking at the logs should see:
+
+  - Every create returns a new entity id.
+  - The tl.reportTCResult call produces a success acknowledgement.
+  - The tl.getLastExecutionResult response carries status 'p' (passed)
+    for the test case — the report persisted and is retrievable.
+  - Each teardown step (tl.deleteBuild, tl.removeTestCaseFromTestPlan,
+    tl.deleteTestPlan, tl.deleteTestProject) returns its own success
+    acknowledgement.
+
+  Fail conditions: any step returns a fault envelope, the read-back
+  carries a status other than 'p', or teardown can't dismantle what
+  setup built.
