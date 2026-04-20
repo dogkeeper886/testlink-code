@@ -155,11 +155,13 @@ steps:
       - "<boolean>1</boolean>|status.*true"
 
 objective: |
-  Confirm that a requirement can be assigned to a test case and that
-  tl.getReqCoverage reflects the linkage. This is the traceability
-  anchor — compliance workflows rely on the ability to attach
-  requirements to the tests that verify them and to query which
-  cases cover which requirements.
+  Confirm that a requirement can be assigned to a test case via
+  tl.assignRequirements without corrupting either entity. This is the
+  write half of the traceability path — compliance workflows rely on
+  the ability to attach requirements to the tests that verify them.
+  Querying coverage by requirement is a separate path (tl.getReqCoverage
+  needs a version id the framework's capture mechanism doesn't expose
+  yet) and is out of scope for this test.
 
 judgeContext: |
   In TestLink, a requirement can be linked to one or more test cases
