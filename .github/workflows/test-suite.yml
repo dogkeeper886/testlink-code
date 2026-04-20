@@ -71,6 +71,14 @@ jobs:
 
       - name: Run tests
         id: run-tests
+        env:
+          # Flow secrets/vars through to the test framework. When unset,
+          # the scripts' defaults kick in (see cicd/tests/src/config.ts and
+          # cicd/scripts/init-db.sh). Local dev keeps using cicd/tests/.env
+          # — workflows never materialize that file. See FR-005.
+          LLM_JUDGE_URL: ${{ secrets.LLM_JUDGE_URL }}
+          LLM_JUDGE_MODEL: ${{ vars.LLM_JUDGE_MODEL }}
+          TL_DEV_KEY: ${{ secrets.TL_DEV_KEY }}
         run: |
           # Build judge flags based on input
           JUDGE_FLAGS=""

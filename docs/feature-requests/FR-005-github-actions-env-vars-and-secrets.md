@@ -1,7 +1,7 @@
 ---
 fr: FR-005
 title: Wire GitHub Actions runner with env vars + secrets for the CI suite
-status: draft
+status: in-progress
 issue: https://github.com/dogkeeper886/testlink-code/issues/19
 authors: ["dogkeeper886"]
 created: 2026-04-20
