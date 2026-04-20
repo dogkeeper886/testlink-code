@@ -1,72 +1,80 @@
 ---
 name: testcase-author
-description: Author or review a TestLink CI test case YAML. Use when the user asks to "add a test for X", "write a testcase", "draft TC-...", or "review this testcase for pattern conformance". Keeps the objective / judgeContext / criteria fields aligned with what the LLM judge expects and avoids the priming-hallucination failure modes documented in cicd/tests/TESTCASE_AUTHORING.md.
+description: Help an author or reviewer think through a CI testcase — what it's proving, what its evidence means, and how its criteria prove or disprove the claim. Use when the user asks to "write a test for X", "author TC-...", or "review this testcase". The skill guides the reasoning; it does not prescribe a template. Canonical guide is cicd/tests/TESTCASE_AUTHORING.md.
 ---
 
-# Authoring and reviewing TestLink testcases
+# Authoring or reviewing a testcase — guided thinking
 
-This skill operates on YAML testcases under `cicd/tests/testcases/<suite>/TC-<SUITE>-NNN.yml`. The canonical authoring guide is [`cicd/tests/TESTCASE_AUTHORING.md`](../../../cicd/tests/TESTCASE_AUTHORING.md) — read it before writing a new test or reviewing an existing one. Framework mechanics (dynamic IDs, teardown order) are in [`cicd/tests/TESTING_GUIDELINES.md`](../../../cicd/tests/TESTING_GUIDELINES.md).
+A testcase is a claim about the system and the evidence for that claim. The LLM judge reads three fields — `objective`, `judgeContext`, `criteria` — as a per-test prompt. This skill walks through the reasoning a good author or reviewer follows. It does not hand over a template; copy-pasted templates produce testcases that describe themselves instead of teaching the judge anything.
 
-## When to invoke
+Read [`cicd/tests/TESTCASE_AUTHORING.md`](../../../cicd/tests/TESTCASE_AUTHORING.md) first. It is the canonical source. For framework mechanics (lifecycle, dynamic IDs, teardown), see [`cicd/tests/TESTING_GUIDELINES.md`](../../../cicd/tests/TESTING_GUIDELINES.md).
 
-- User says: "add a test for X", "write TC-<SUITE>-<NNN>", "draft a testcase that exercises Y", "review this YAML for pattern conformance"
-- User has changed a YAML and wants feedback before committing
-- An LLM-judge failure needs triaging — is the test wrong or is the LLM hallucinating?
+## Two modes
 
-## What this skill does
+### Mode A — Authoring a new testcase
 
-Two modes:
+Don't start by writing YAML. Start by answering four questions.
 
-### Mode A — Author a new testcase
+1. **What claim about the system is this test making?**
+   One sentence. Not "this test calls X and asserts Y" — that's the *how*. The claim is the *why*: "the admin API key accepts valid clients", "executions persist with the reported status", "the Docker image builds reproducibly from the current Dockerfile."
+   
+   If you can't state a single clean claim, the test is trying to prove too many things. Split it.
 
-1. Confirm the suite. If the user wants a test in a new suite (not in `SUITES` in `cicd/tests/src/config.ts`), add the suite to that array first — otherwise the test won't be discovered.
-2. Pick the next `TC-<SUITE>-NNN` number by listing existing files in `cicd/tests/testcases/<suite>/`.
-3. Start from the skeleton at the bottom of `TESTCASE_AUTHORING.md`.
-4. For each step: write a real XML-RPC call using `cicd/scripts/xmlrpc-capture.sh` — never shell out directly to `curl`. Use `{{devKey}}`, `{{runId}}`, `{{testId}}`, `{{projectId}}`, `{{suiteId}}`, etc. Never hardcode IDs or API keys.
-5. Capture each new entity's id via `capture:` and reference it in subsequent steps. No numeric literals in XML-RPC params except semantic constants (e.g., `step_number=1`, `version=1`).
-6. Teardown in reverse creation order as the last steps of the testcase.
-7. Write the three framing fields carefully (next section).
-8. Run the suite once before committing — the test should pass both the simple judge AND the LLM judge. If only the simple judge passes, re-read the LLM judge's reason and either:
-   - Tighten `expectPatterns` if the LLM caught a real false-positive.
-   - Tighten `judgeContext` if the LLM is primed to hallucinate (see "anti-patterns" below).
+2. **What's the minimum scenario that would prove this claim?**
+   Walk backwards from the claim to the shortest sequence of operations that exercises it. Don't pad the test with incidental verification — each extra assertion is something that can misfire.
 
-### Mode B — Review an existing testcase
+3. **What will the evidence look like if the claim holds? If it doesn't?**
+   Be specific. Don't say "the response indicates success." Say: "stderr contains `<member><name>status</name><value><string>p</string></value></member>`; absence of that exact fragment, or presence of a `<fault>` envelope, is the disproof."
+   
+   If you can't describe the evidence shape confidently, you may not understand the API well enough yet. Go run the operations manually and inspect the real output before writing the test.
 
-Walk through this checklist. Flag each miss as a finding:
+4. **What would a new colleague need to know to interpret this evidence correctly?**
+   This is what `judgeContext` is for. The judge is a colleague who starts from zero every invocation. Teach it — but teach only what's needed to read *these* logs, not the whole system.
 
-**Structure**
-- [ ] `objective`, `judgeContext`, `criteria` all present and non-empty.
-- [ ] `dependencies` lists every earlier test the runner must have passed before this one.
-- [ ] Every step has a `name`, a `command`, and either `expectPatterns` or explicit `capture:`.
-- [ ] Test-case-level `timeout` generous enough for the slowest step (often setup+teardown).
+Once those are answered, the three fields write themselves:
+- **`objective`** ← answer to (1), plus why it matters.
+- **`judgeContext`** ← answer to (4).
+- **`criteria`** ← answer to (3), tightened to exact observable fragments.
 
-**Conventions**
-- [ ] `{{devKey}}` used everywhere, no hardcoded API key literals.
-- [ ] Every created entity has a `{{runId}}` or `{{testId}}` suffix in its name.
-- [ ] Entity IDs flow via `capture:` — no numeric literals in XML-RPC params except `step_number`/`version` style constants.
-- [ ] Teardown deletes in reverse creation order.
-- [ ] Suite name in the YAML matches the directory name.
+Then draft the YAML (steps, capture chain, teardown) using the skeleton mechanics in `TESTING_GUIDELINES.md`. Run the suite and read the verdict — if the judge fails, read its reason and check: is the criterion actually met in the evidence? If yes, either the criteria language is imprecise or the judgeContext is missing domain knowledge. Fix at the source.
 
-**LLM-judge precision**
-- [ ] `expectPatterns` are tight. Any `|` alternation has alternatives that independently prove the assertion — not one real assertion OR'd with a field that's always present regardless of correctness. (See TC-EXEC-003 history: `"build-{{testId}}-{{runId}}|total_tc"` let a false-positive through.)
-- [ ] For negative tests, the `judgeContext` opens with `THIS IS A NEGATIVE TEST —`.
-- [ ] For tests with 10+ steps, the `judgeContext`'s failure-modes list ends with a guardrail: `IMPORTANT FOR THE JUDGE: only flag these if evidence actually shows them.`
-- [ ] Assertion patterns prefer literal XML/JSON fragments (e.g., `<name>status</name><value><string>p</string>`) over loose word matches (`status|passed`).
+### Mode B — Reviewing a testcase
 
-**Anti-patterns to call out**
-- [ ] Long speculative lists in judgeContext without a guardrail. Small-model judges (gemma3:4b) grab a phrase verbatim and use it as "reason" for fail even when evidence contradicts. Either shorten the list or mark it hypothetical.
-- [ ] `expectPatterns` that match on fields present in BOTH success and failure responses. These pass the simple judge silently even when the assertion doesn't hold.
-- [ ] `objective` that describes the mechanics (what the test does) instead of the purpose (what the test proves and why it matters).
-- [ ] Missing teardown for any entity created in setup. Even when the plan/project cascade would clean up, an explicit per-entity delete is preferred because it lets the test catch the delete-API regression too.
+Walk through these questions. Record each as a finding. Severity is based on what breaks when it's wrong.
+
+**Is the claim clear?**
+- Reading only `objective`, do you understand what regression this test protects against?
+- Is it one claim, or is the field secretly listing three?
+
+**Is the evidence explained?**
+- Does `judgeContext` tell you what the logs *mean*, or does it retell the YAML's steps?
+- If a junior engineer read the logs and this field, could they interpret them correctly?
+- Is there speculation about failure modes the evidence couldn't actually reveal? (Those prime the judge to hallucinate.)
+
+**Are the criteria precise?**
+- Could a human verify the criteria against a log file without consulting the author?
+- If any criterion has regex alternation (`A|B`), does each alternative *independently* prove the claim? Or is one alternative a field that's always present anyway?
+- Do the criteria name the exact fragment in the exact place, or vaguely say "success" / "passed" / "valid"?
+
+**Are the three fields doing different work?**
+- Is `judgeContext` adding something the `objective` and the steps themselves don't already say?
+- Are `criteria` specific to observable evidence, or do they repeat the `objective` in different words?
+- All three together should be shorter than the steps block, not longer.
+
+**Mechanics (from `TESTING_GUIDELINES.md`, briefly):**
+- All IDs come from `capture:`, no hardcoded numeric literals in XML-RPC params.
+- `{{devKey}}` everywhere, no API key literals.
+- Teardown in reverse creation order.
+- Entity names carry `{{runId}}` or `{{testId}}`.
+- All XML-RPC through `cicd/scripts/xmlrpc-capture.sh`.
+
+## What NOT to do in either mode
+
+- **Don't prescribe a formula to the author.** If you find yourself saying "add `IMPORTANT FOR THE JUDGE:` to your context" or any other magic phrase, stop. Ask instead: *what does the author know about this test that the judge doesn't?* The author's answer IS the `judgeContext`. Formulas produce noise; domain knowledge produces signal.
+- **Don't grade the test against an LLM model's known quirks.** If a particular model hallucinates on long tests, that's a framework concern. The test author's job is to communicate the claim and evidence well; a well-written test will survive most models.
+- **Don't let a loose `expectPattern` slide** because the test currently passes. Loose patterns are silent future regressions. Tight is always better.
 
 ## Output
 
-- Mode A: produce the YAML file, run the suite once, summarize the verdict. If either judge fails, iterate.
-- Mode B: a bulleted report by finding — "Issue: X; Severity: should-fix/worth-considering; Suggested fix: Y". Don't rewrite the YAML in the report; let the user decide scope.
-
-## Anti-patterns this skill specifically tries to prevent
-
-- **Using `curl` directly in steps.** Every XML-RPC call must go through `cicd/scripts/xmlrpc-capture.sh` — it mirrors the raw response to stderr (for expectPatterns) and produces a structured JSON envelope on stdout (for `capture:`). Direct `curl` calls bypass both.
-- **Putting new testcase YAML in the root or a random dir.** Always `cicd/tests/testcases/<suite>/TC-<SUITE>-NNN.yml`.
-- **Forgetting to register a new suite name in `cicd/tests/src/config.ts` (`SUITES` const).** If the suite isn't in that array, the test doesn't run.
-- **Running the test without the stack up.** The runner (`bash cicd/scripts/run-tests.sh`) handles ci-up/ci-down automatically — don't start containers manually unless explicitly debugging.
+- **Mode A:** produce the YAML, run the suite once, report the verdict. If both judges pass on the first run, the authoring was probably good. If the LLM judge fails with a reason that cites something absent from the evidence, the `judgeContext` may need a concrete statement about what's *not* an error (e.g. "intermediate status values are expected — the final state is the verdict"). Fix specifically, don't generalize.
+- **Mode B:** a bulleted finding report. One line per finding: what's weak, why it matters, what would fix it. Don't rewrite the YAML — the author decides scope.

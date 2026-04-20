@@ -2,70 +2,55 @@
 
 This repository is a fork of TestLink (PHP test management system). This file tells AI agents how to work in it.
 
-## What lives where
+## Orientation
 
-- **`lib/`** — Core PHP. XML-RPC server at `lib/api/xmlrpc/v1/xmlrpc.class.php` (91 registered methods; grep `'tl\.` to enumerate).
-- **`gui/`, `cfg/`, `install/`** — Web UI, config, and DB schema. Rarely touched.
-- **`cicd/`** — CI test framework and docker-compose for the test stack. This is where most AI-assisted work happens.
-  - `cicd/docker-compose.ci.yml` — CI stack (app on port 8091 by default; dev is 8090).
-  - `cicd/scripts/run-tests.sh` — session wrapper; sources `cicd/tests/.env`; guaranteed teardown via `trap EXIT`.
-  - `cicd/scripts/xmlrpc-capture.sh` — XML-RPC helper every YAML test step uses.
+- **`lib/`** — Core PHP. XML-RPC server at `lib/api/xmlrpc/v1/xmlrpc.class.php`. Enumerate the registered methods with `grep "'tl\." lib/api/xmlrpc/v1/xmlrpc.class.php`.
+- **`gui/`, `cfg/`, `install/`** — Web UI, config, and DB schema. Rarely touched in AI-assisted work.
+- **`cicd/`** — CI test framework and docker-compose for the test stack. Most AI-assisted work happens here.
+  - `cicd/docker-compose.ci.yml` — CI stack. Publishes on `${TL_PORT:-8091}`; dev stack on 8090.
+  - `cicd/scripts/run-tests.sh` — session wrapper. Sources `cicd/tests/.env`, guarantees teardown via `trap EXIT`, skips the lifecycle for the `build` suite.
+  - `cicd/scripts/xmlrpc-capture.sh` — the only thing YAML test steps should use to call the XML-RPC API. Never shell out to `curl` directly.
   - `cicd/tests/testcases/<suite>/TC-<SUITE>-NNN.yml` — test definitions.
   - `cicd/tests/TESTING_GUIDELINES.md` — framework mechanics (lifecycle, dynamic IDs, teardown).
-  - `cicd/tests/TESTCASE_AUTHORING.md` — how to write the LLM-judge-facing fields (`objective`, `judgeContext`, `criteria`).
-- **`docs/feature-requests/`** — Paired design records for every non-trivial change. Each FR links to a GitHub issue.
-- **`.claude/skills/`** — Project-scoped Claude Code skills (see "Skills" below).
+  - `cicd/tests/TESTCASE_AUTHORING.md` — how to think about `objective`, `judgeContext`, and `criteria` for the LLM judge.
+- **`docs/feature-requests/`** — paired design records. Each non-trivial change gets an FR doc linked to its GitHub issue before code is written.
+- **`.claude/skills/`** — project-scoped Claude Code skills (see "Skills" below).
 
 ## Main branch
 
-`testlink_1_9_20_fixed`. Inherited from upstream; not renamed to `main` because the fork still pulls from `TestLinkOpenSourceTRMS/testlink-code`. Workflows in `.github/workflows/` are `workflow_dispatch`-only (manual trigger).
+`testlink_1_9_20_fixed`. Inherited from upstream; not renamed to `main` because the fork still pulls from `TestLinkOpenSourceTRMS/testlink-code`.
+
+## GitHub workflows
+
+All workflows in `.github/workflows/` are `workflow_dispatch` only. They do not fire on push or PR. That is intentional — run them manually from the Actions tab when you want them. Do not change this to automatic triggers without an explicit instruction.
 
 ## Skills
 
-Skills live at `.claude/skills/<name>/SKILL.md`. They're committed to the repo so every collaborator (AI or human) has access to the same tooling.
+**Project-specific skills live in `.claude/skills/<name>/` and are committed to the repo.**
 
-**IMPORTANT: Project-specific skills NEVER go in `~/.claude/skills/`.** Anything about this repo, its testcases, its workflows, or its conventions belongs in `.claude/skills/<name>/` in the repo tree. User-folder skills are for cross-project tooling only. If you catch yourself putting project work into the user folder, stop and put it in `.claude/skills/` instead.
+Skills belong in the repo — not in `~/.claude/skills/` — so every collaborator (human or AI) starts with the same tooling. When adding a skill for this project, put it under `.claude/skills/` in this tree. If you notice a project skill sitting in the user folder, move it.
 
-Current skills in this repo:
-- `feature-request` — Author a feature request doc (`docs/feature-requests/FR-NNN-*.md`) paired with a GitHub issue. Use before starting any non-trivial change.
-- `testcase-author` — Author or review a CI test YAML. Use for anything under `cicd/tests/testcases/`.
+To see what skills currently exist here: `ls .claude/skills/`. Each skill's purpose is documented in its own `SKILL.md`.
 
-## Workflow conventions
+## Commit and PR conventions
 
-### Branches and PRs
-- Branch names: `issue-N-short-slug` for issues, `docs/short-slug` for docs-only work, `feat/...` or `fix/...` only if no issue exists.
-- Every non-trivial change gets an FR doc paired with a GitHub issue *before* code is written. Small fixes can skip the FR.
-- PR titles: conventional-commit style (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`). Reference issues via `Closes #N`.
+- Git identity for this repo is set locally to Shang Chieh Tseng / shangchieh.tseng@tsengsyu.com / dogkeeper886. Don't change it.
+- Branch names: `issue-N-short-slug` for tracked issues, `docs/short-slug` for docs-only work, `feat/...` or `fix/...` only when no issue exists.
+- Commit subjects follow Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`).
+- Every non-trivial change is paired with an FR doc + GitHub issue before code is written. Small one-file fixes can skip this.
+- PR descriptions reference issues with `Closes #N`. Merge deletes the branch.
 
-### Commits
-- `git config` for this repo is set to commit as Shang Chieh Tseng / shangchieh.tseng@tsengsyu.com / dogkeeper886. Don't change it.
-- No sudo for docker commands. If `docker ps` fails, the user account isn't in the docker group — stop and flag it.
+## Testing
 
-### Testing
-- `bash cicd/scripts/run-tests.sh` runs the full suite. It brings the stack up, runs all tests, and tears down via `trap EXIT` regardless of outcome.
-- `--suite <name>` filters by suite (`build`, `smoke`, `auth`, `crud`, `plan`, `execution`, `workflow`, `negative`, `regression`).
-- `build` suite skips ci-up/ci-down (it only exercises the image artifact).
-- Tests must pass both the simple judge (regex) and the LLM judge (semantic) to be green. If only one passes, read the failing judge's reason — it's often a real finding (the LLM caught a loose pattern the regex let through).
+- `bash cicd/scripts/run-tests.sh` runs the full suite. The wrapper brings the stack up, runs the tests, tears down on any exit path.
+- `--suite <name>` filters by suite. The set of valid suite names is the `SUITES` const in `cicd/tests/src/config.ts`. Registering a new suite directory means adding its name there.
+- A test is green only when both the simple judge (pattern match) and the LLM judge (semantic review) agree. A disagreement usually means one of them is wrong — read the reason before deciding which.
+- LLM judge configuration lives in `cicd/tests/.env` (`LLM_JUDGE_URL`, `LLM_JUDGE_MODEL`).
 
-### LLM judge
-- Config in `cicd/tests/.env`: `LLM_JUDGE_URL`, `LLM_JUDGE_MODEL`.
-- Current model is `gemma3:4b`. It's reliable on short tests but flakes on 10+ step multi-entity tests due to small-model long-context limits. Don't treat a single LLM-judge failure on a long test as dispositive without reading the actual stderr.
-- See `TESTCASE_AUTHORING.md` for how to write test fields that minimize LLM-judge flakiness.
+## Rules
 
-## Things not to do
-
-- **Don't run the test runner from inside a workflow** that's configured to fire on every push. All GitHub workflows in this repo are `workflow_dispatch` only; keep them that way.
-- **Don't `sudo docker`.** User's in the docker group.
-- **Don't put project-specific skills in `~/.claude/skills/`.** Always `.claude/skills/<name>/` here.
-- **Don't hardcode `a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4`** (the admin API key) in new test steps. Use `{{devKey}}` — it's injected from `TL_DEV_KEY` in `.env`.
-- **Don't hardcode entity IDs.** Capture every ID from its create-response. Grep for `testcaseid=1` / `testprojectid=1` / similar in new code as a lint check.
-- **Don't merge to main without the suite passing.** Simple judge: 19/19. LLM judge: whatever it says (known flake on ~0-3 multi-step tests with gemma3:4b).
-
-## Memory vs. this file
-
-Anything in this file is authoritative for AI-agent behavior in this repo. Personal memory (`~/.claude/projects/.../memory/`) is for cross-session continuity with one user and shouldn't override anything here.
-
-## Contacts
-
-- Upstream repo: `TestLinkOpenSourceTRMS/testlink-code` (issues disabled upstream; we track issues on our fork).
-- Fork: `dogkeeper886/testlink-code`.
+- Don't use `sudo` with docker. The user is in the docker group — if a docker command fails with a permission error, something is wrong, stop and report rather than escalating.
+- Don't hardcode the admin API key. Use `{{devKey}}` in test YAMLs and `$TL_DEV_KEY` in scripts. The value flows from `cicd/tests/.env` through the framework.
+- Don't hardcode entity IDs in test steps. Every ID comes from a prior step's `capture:`.
+- Don't put project-specific skills in `~/.claude/skills/`. They belong in `.claude/skills/` here.
+- Don't switch workflows to automatic triggers without an explicit instruction.
