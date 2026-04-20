@@ -45,9 +45,9 @@ done
 cleanup() {
   local exit_code=$?
   if [ "$NEEDS_STACK" = "true" ]; then
-    echo ""
-    echo "=== Session teardown (exit code: $exit_code) ==="
-    "$SCRIPT_DIR/ci-down.sh" || echo "[WARN] Teardown failed — inspect containers manually"
+    echo "" >&2
+    echo "=== Session teardown (exit code: $exit_code) ===" >&2
+    "$SCRIPT_DIR/ci-down.sh" || echo "[WARN] Teardown failed — inspect containers manually" >&2
   fi
   exit "$exit_code"
 }
@@ -55,7 +55,7 @@ cleanup() {
 if [ "$NEEDS_STACK" = "true" ]; then
   # Arm the trap before ci-up so a failed startup still triggers teardown.
   trap cleanup EXIT INT TERM
-  echo "=== Session setup ==="
+  echo "=== Session setup ===" >&2
   "$SCRIPT_DIR/ci-up.sh"
 fi
 

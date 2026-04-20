@@ -2,6 +2,12 @@
 # Start CI environment: build image, start services, init DB, verify health
 set -e
 
+# This script's output is entirely log/side-effect — no data. Send it
+# all to stderr so a caller that captures the wrapper's stdout (e.g.
+# `run-tests.sh ... --format json > results.json`) doesn't end up
+# with docker build output and banner lines interleaved with JSON.
+exec >&2
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/../docker-compose.ci.yml"
 
