@@ -310,7 +310,6 @@ export class LLMJudge {
     const positiveMarkers = [
       'successfully', 'successful', 'as expected', 'correctly', 'works correctly',
       'meeting the criteria', 'met the criteria', 'passed all', 'all steps passed',
-      'demonstrating the latest-wins', 'indicating the deletion was successful',
     ];
     const negativeMarkers = [
       'failed to', 'did not', 'does not', 'missing the expected', 'not contain',
