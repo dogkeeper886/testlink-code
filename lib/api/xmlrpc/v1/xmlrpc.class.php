@@ -9278,6 +9278,336 @@ class TestlinkXMLRPCServer extends IXR_Server {
     }
 
     /**
+     * Create a requirement specification under a test project.
+     *
+     * Thin XML-RPC adapter over requirement_spec_mgr::create. The UI
+     * already uses that helper — this method just exposes it to
+     * external consumers.
+     *
+     * @param struct $args
+     * @param string $args["devKey"]
+     * @param int    $args["testprojectid"]
+     * @param string $args["requirementdocid"]  unique doc id within project
+     * @param string $args["title"]
+     * @param string $args["scope"]             free-text description
+     * @param int    $args["parentid"]          (optional) parent spec id for
+     *                                          nested specs; defaults to
+     *                                          testprojectid for top-level.
+     *
+     * @return mixed $resultInfo
+     *        [status]  => true on success
+     *        [id]      => new requirement spec id
+     *        [message] => optional message string
+     * @access public
+     */
+    public function createRequirementSpecification($args) {
+        $operation = __FUNCTION__;
+        $messagePrefix = "({$operation}) - ";
+
+        $resultInfo = array();
+        $resultInfo[0]["id"] = 0;
+        $resultInfo[0]["status"] = true;
+        $resultInfo[0]["operation"] = $operation;
+        $resultInfo[0]["message"] = GENERAL_SUCCESS_STR;
+
+        $this->_setArgs( $args );
+
+        $checkFunctions = array(
+                'authenticate',
+                'checkTestProjectID'
+        );
+        $status_ok = $this->_runChecks( $checkFunctions, $messagePrefix );
+
+        if($status_ok) {
+            $status_ok = $this->_isParamPresent( self::$requirementDocIDParamName, $messagePrefix, self::SET_ERROR )
+                      && $this->_isParamPresent( self::$titleParamName, $messagePrefix, self::SET_ERROR )
+                      && $this->_isParamPresent( self::$scopeParamName, $messagePrefix, self::SET_ERROR );
+        }
+
+        if($status_ok) {
+            $status_ok = $this->userHasRight( "mgt_modify_req", self::CHECK_PUBLIC_PRIVATE_ATTR );
+            if(!$status_ok) {
+                $this->errors[] = new IXR_Error( INSUFFICIENT_RIGHTS, $messagePrefix . INSUFFICIENT_RIGHTS_STR );
+            }
+        }
+
+        if($status_ok) {
+            $tprojectID = intval( $this->args[self::$testProjectIDParamName] );
+            $parentID = $this->_isParamPresent( self::$parentIDParamName )
+                ? intval( $this->args[self::$parentIDParamName] )
+                : $tprojectID;
+            $docID = (string) $this->args[self::$requirementDocIDParamName];
+            $title = (string) $this->args[self::$titleParamName];
+            $scope = (string) $this->args[self::$scopeParamName];
+
+            // countReq=0 for a fresh spec; the helper tracks it independently.
+            // Pass an explicit type — the helper's default (TL_REQ_SPEC_TYPE_FEATURE)
+            // is an undefined constant that explodes on the DB layer (type column
+            // is CHAR(1)). TL_REQ_SPEC_TYPE_SECTION = '1' is the "section" variant
+            // and the most neutral choice for API-created specs.
+            $op = $this->reqSpecMgr->create(
+                $tprojectID, $parentID, $docID, $title, $scope,
+                0, $this->userID, TL_REQ_SPEC_TYPE_SECTION
+            );
+
+            if(isset( $op['status_ok'] ) && $op['status_ok']) {
+                $resultInfo[0]["id"] = intval( $op['id'] );
+            } else {
+                $status_ok = false;
+                $msg = $messagePrefix . (isset( $op['msg'] ) ? $op['msg'] : 'create failed');
+                // 11000-range is reserved for requirement spec errors.
+                $this->errors[] = new IXR_Error( REQSPEC_KO, $msg );
+            }
+        }
+
+        return $status_ok ? $resultInfo : $this->errors;
+    }
+
+    /**
+     * Delete a requirement specification by id.
+     *
+     * Uses requirement_spec_mgr::delete_deep to remove the spec and
+     * its descendants (child specs + requirements + revisions). For
+     * a single-level delete (no children), delete() alone suffices —
+     * delete_deep is a superset.
+     *
+     * @param struct $args
+     * @param string $args["devKey"]
+     * @param int    $args["reqspecid"]
+     *
+     * @return mixed $resultInfo
+     *        [status]  => true on success
+     *        [id]      => reqspecid that was deleted
+     *        [message] => optional message string
+     * @access public
+     */
+    public function deleteRequirementSpecification($args) {
+        $operation = __FUNCTION__;
+        $messagePrefix = "({$operation}) - ";
+
+        $resultInfo = array();
+        $resultInfo[0]["id"] = 0;
+        $resultInfo[0]["status"] = true;
+        $resultInfo[0]["operation"] = $operation;
+        $resultInfo[0]["message"] = GENERAL_SUCCESS_STR;
+
+        $this->_setArgs( $args );
+
+        $checkFunctions = array(
+                'authenticate'
+        );
+        $status_ok = $this->_runChecks( $checkFunctions, $messagePrefix );
+
+        if($status_ok) {
+            $status_ok = $this->_isParamPresent( self::$reqSpecIDParamName, $messagePrefix, self::SET_ERROR );
+        }
+
+        if($status_ok) {
+            $status_ok = $this->userHasRight( "mgt_modify_req", self::CHECK_PUBLIC_PRIVATE_ATTR );
+            if(!$status_ok) {
+                $this->errors[] = new IXR_Error( INSUFFICIENT_RIGHTS, $messagePrefix . INSUFFICIENT_RIGHTS_STR );
+            }
+        }
+
+        if($status_ok) {
+            $reqSpecID = intval( $this->args[self::$reqSpecIDParamName] );
+            $this->reqSpecMgr->delete_deep( $reqSpecID );
+            $resultInfo[0]["id"] = $reqSpecID;
+        }
+
+        return $status_ok ? $resultInfo : $this->errors;
+    }
+
+    /**
+     * List requirement specifications directly under a test project.
+     *
+     * Does not recurse into nested specs. Returns the first-level
+     * specs keyed by id (recordset from
+     * requirement_spec_mgr::get_all_in_testproject).
+     *
+     * @param struct $args
+     * @param string $args["devKey"]
+     * @param int    $args["testprojectid"]
+     *
+     * @return array of spec records, or fault on error.
+     * @access public
+     */
+    public function getRequirementSpecificationsForTestProject($args) {
+        $messagePrefix = "(" . __FUNCTION__ . ") - ";
+        $this->_setArgs( $args );
+
+        $checkFunctions = array(
+                'authenticate',
+                'checkTestProjectID'
+        );
+        $status_ok = $this->_runChecks( $checkFunctions, $messagePrefix );
+
+        if($status_ok) {
+            $context = array( self::$testProjectIDParamName => $this->args[self::$testProjectIDParamName] );
+            $status_ok = $this->userHasRight( 'mgt_view_req', self::CHECK_PUBLIC_PRIVATE_ATTR, $context );
+        }
+
+        if($status_ok) {
+            $tprojectID = intval( $this->args[self::$testProjectIDParamName] );
+
+            // requirement_spec_mgr::get_all_in_testproject() exists but its
+            // SELECT references columns (scope/total_req/type/author_id/...)
+            // that live on req_specs_revisions, not req_specs — a pre-existing
+            // schema drift in that helper. We run our own query joining the
+            // spec row, its latest revision (for title/scope/type/author),
+            // and the node hierarchy entry (for node_order).
+            $reqSpecsTable = DB_TABLE_PREFIX . 'req_specs';
+            $revTable = DB_TABLE_PREFIX . 'req_specs_revisions';
+            $nhTable = DB_TABLE_PREFIX . 'nodes_hierarchy';
+            $sql = " SELECT RSPEC.id, RSPEC.testproject_id, RSPEC.doc_id, " .
+                   " NH.name AS title, NH.node_order, " .
+                   " REV.scope, REV.total_req, REV.type, REV.author_id, " .
+                   " REV.creation_ts, REV.modifier_id, REV.modification_ts " .
+                   " FROM {$reqSpecsTable} RSPEC " .
+                   " JOIN {$nhTable} NH ON NH.id = RSPEC.id " .
+                   " LEFT JOIN {$revTable} REV ON REV.parent_id = RSPEC.id " .
+                   " WHERE RSPEC.testproject_id = " . intval( $tprojectID ) .
+                   " ORDER BY NH.name";
+            $rs = $this->dbObj->get_recordset( $sql );
+            return is_null( $rs ) ? array() : $rs;
+        }
+
+        return $this->errors;
+    }
+
+    /**
+     * Create a requirement under an existing requirement specification.
+     *
+     * Thin XML-RPC adapter over requirement_mgr::create.
+     *
+     * @param struct $args
+     * @param string $args["devKey"]
+     * @param int    $args["testprojectid"]
+     * @param int    $args["reqspecid"]          parent spec id
+     * @param string $args["requirementdocid"]   unique doc id within project
+     * @param string $args["title"]
+     * @param string $args["scope"]              free-text description
+     *
+     * @return mixed $resultInfo
+     *        [status]  => true on success
+     *        [id]      => new requirement id
+     *        [message] => optional message string
+     * @access public
+     */
+    public function createRequirement($args) {
+        $operation = __FUNCTION__;
+        $messagePrefix = "({$operation}) - ";
+
+        $resultInfo = array();
+        $resultInfo[0]["id"] = 0;
+        $resultInfo[0]["status"] = true;
+        $resultInfo[0]["operation"] = $operation;
+        $resultInfo[0]["message"] = GENERAL_SUCCESS_STR;
+
+        $this->_setArgs( $args );
+
+        $checkFunctions = array(
+                'authenticate',
+                'checkTestProjectID'
+        );
+        $status_ok = $this->_runChecks( $checkFunctions, $messagePrefix );
+
+        if($status_ok) {
+            $status_ok = $this->_isParamPresent( self::$reqSpecIDParamName, $messagePrefix, self::SET_ERROR )
+                      && $this->_isParamPresent( self::$requirementDocIDParamName, $messagePrefix, self::SET_ERROR )
+                      && $this->_isParamPresent( self::$titleParamName, $messagePrefix, self::SET_ERROR )
+                      && $this->_isParamPresent( self::$scopeParamName, $messagePrefix, self::SET_ERROR );
+        }
+
+        if($status_ok) {
+            $status_ok = $this->userHasRight( "mgt_modify_req", self::CHECK_PUBLIC_PRIVATE_ATTR );
+            if(!$status_ok) {
+                $this->errors[] = new IXR_Error( INSUFFICIENT_RIGHTS, $messagePrefix . INSUFFICIENT_RIGHTS_STR );
+            }
+        }
+
+        if($status_ok) {
+            $tprojectID = intval( $this->args[self::$testProjectIDParamName] );
+            $reqSpecID = intval( $this->args[self::$reqSpecIDParamName] );
+            $reqDocID = (string) $this->args[self::$requirementDocIDParamName];
+            $title = (string) $this->args[self::$titleParamName];
+            $scope = (string) $this->args[self::$scopeParamName];
+
+            // Defaults for status/type/coverage/node_order come from the
+            // helper's signature (TL_REQ_STATUS_VALID / TL_REQ_TYPE_INFO / 1 / 0).
+            $op = $this->reqMgr->create(
+                $reqSpecID, $reqDocID, $title, $scope, $this->userID,
+                TL_REQ_STATUS_VALID, TL_REQ_TYPE_INFO, 1, 0, $tprojectID
+            );
+
+            if(isset( $op['status_ok'] ) && $op['status_ok']) {
+                $resultInfo[0]["id"] = intval( $op['id'] );
+            } else {
+                $status_ok = false;
+                $msg = $messagePrefix . (isset( $op['msg'] ) ? $op['msg'] : 'create failed');
+                $this->errors[] = new IXR_Error( REQ_KO, $msg );
+            }
+        }
+
+        return $status_ok ? $resultInfo : $this->errors;
+    }
+
+    /**
+     * Delete a requirement by id.
+     *
+     * Removes all versions and the node itself. Does not unassign from
+     * linked test cases automatically — callers expecting a clean
+     * traceability state should call tl.assignRequirements with an
+     * empty set beforehand.
+     *
+     * @param struct $args
+     * @param string $args["devKey"]
+     * @param int    $args["requirementid"]
+     *
+     * @return mixed $resultInfo
+     *        [status]  => true on success
+     *        [id]      => requirementid that was deleted
+     *        [message] => optional message string
+     * @access public
+     */
+    public function deleteRequirement($args) {
+        $operation = __FUNCTION__;
+        $messagePrefix = "({$operation}) - ";
+
+        $resultInfo = array();
+        $resultInfo[0]["id"] = 0;
+        $resultInfo[0]["status"] = true;
+        $resultInfo[0]["operation"] = $operation;
+        $resultInfo[0]["message"] = GENERAL_SUCCESS_STR;
+
+        $this->_setArgs( $args );
+
+        $checkFunctions = array(
+                'authenticate'
+        );
+        $status_ok = $this->_runChecks( $checkFunctions, $messagePrefix );
+
+        if($status_ok) {
+            $status_ok = $this->_isParamPresent( self::$requirementIDParamName, $messagePrefix, self::SET_ERROR );
+        }
+
+        if($status_ok) {
+            $status_ok = $this->userHasRight( "mgt_modify_req", self::CHECK_PUBLIC_PRIVATE_ATTR );
+            if(!$status_ok) {
+                $this->errors[] = new IXR_Error( INSUFFICIENT_RIGHTS, $messagePrefix . INSUFFICIENT_RIGHTS_STR );
+            }
+        }
+
+        if($status_ok) {
+            $reqID = intval( $this->args[self::$requirementIDParamName] );
+            $this->reqMgr->delete( $reqID );
+            $resultInfo[0]["id"] = $reqID;
+        }
+
+        return $status_ok ? $resultInfo : $this->errors;
+    }
+
+    /**
      * update result of LATEST execution for each
      * step.
      *
@@ -9489,6 +9819,11 @@ class TestlinkXMLRPCServer extends IXR_Server {
                 'tl.getRequirements' => 'this:getRequirements',
                 'tl.getRequirement' =>  'this:getRequirement',
                 'tl.getReqCoverage' => 'this:getReqCoverage',
+                'tl.getRequirementSpecificationsForTestProject' => 'this:getRequirementSpecificationsForTestProject',
+                'tl.createRequirementSpecification' => 'this:createRequirementSpecification',
+                'tl.deleteRequirementSpecification' => 'this:deleteRequirementSpecification',
+                'tl.createRequirement' => 'this:createRequirement',
+                'tl.deleteRequirement' => 'this:deleteRequirement',
                 'tl.setTestCaseTestSuite' => 'this:setTestCaseTestSuite',
                 'tl.getExecutionSet' => 'this:getExecutionSet',
                 'tl.checkDevKey' => 'this:checkDevKey',
