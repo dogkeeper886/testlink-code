@@ -141,36 +141,19 @@ objective: |
   executions can be recorded.
 
 judgeContext: |
-  Nine steps setup → exercise → teardown:
-  1-4. Setup — project, suite, case (with step), plan.
-  5. addTestCaseToTestPlan with testcaseexternalid (PA<runId>-1) and
-     version 1. Success response contains "feature_id" or "status:true".
-  6. getTestCasesForTestPlan — stderr should contain either the external
-     id "PA{{runId}}-1" or a "tc_id" field proving at least one case is
-     attached.
-  7. removeTestCaseFromTestPlan — the issue #8 method. Success is
-     <boolean>1</boolean>.
-  8-9. Teardown plan + project (reverse creation).
+  Attaching a test case to a test plan is a precondition for executions
+  — a case must be on the plan before any result can be reported against
+  it. TestLink links cases to plans through the testplan_tcversions
+  table; addTestCaseToTestPlan creates a row there, and a matching
+  removeTestCaseFromTestPlan (the issue #8 addition) deletes it.
 
-  Silent failures to watch for:
-  - Step 5 returns status:true but the case wasn't actually attached
-    (no feature_id). Step 6 would then return empty and expectPattern
-    would miss.
-  - Step 7 returns <boolean>1</boolean> but the link row persists in
-    testplan_tcversions. Follow-up plan delete would cascade-clean, so
-    we don't directly detect this — if container logs show extra rows
-    deleted during plan teardown, flag it.
-  - Step 5's expectPattern is permissive (feature_id|status). A fault
-    response that happens to include "status" in its string would pass
-    the pattern; check the code field to be sure.
+  getTestCasesForTestPlan returns a struct of attached cases keyed by
+  case id. Each entry carries the case's external id (like PA<runId>-1)
+  and the internal tc_id, so an attached case is identifiable by either.
 
 criteria: |
-  PASS when:
-  - Steps 1-4 each return a new id (create responses have <name>id</name>).
-  - Step 5 response contains feature_id or status with boolean 1.
-  - Step 6 stderr contains the case external id or a tc_id field.
-  - Step 7 (removeTestCaseFromTestPlan) returns <boolean>1</boolean>.
-  - Steps 8-9 each return <boolean>1</boolean>.
+  Pass: tl.addTestCaseToTestPlan returns feature_id;
+  tl.getTestCasesForTestPlan response contains "PA<runId>-1";
+  tl.removeTestCaseFromTestPlan returns boolean 1.
 
-  FAIL on any fault envelope, missing case in the plan listing, or
-  failure of the new removeTestCaseFromTestPlan method.
+  Fail: any of the three is missing, or any step carries a fault envelope.

@@ -78,30 +78,24 @@ objective: |
   can be recorded.
 
 judgeContext: |
-  Four steps via xmlrpc-capture.sh:
-  1. Create parent project (needed because plans belong to a project).
-  2. Create plan under {{projectId}} with a unique name — capture planId.
-  3. Read the plan back by name+project — response stderr must contain
-     the literal "plan-{{testId}}-{{runId}}" string.
-  4. Delete plan by captured ID, then delete project by prefix.
+  Test plans in TestLink belong to a project, so the test creates a
+  parent project first. Each XML-RPC call goes through
+  cicd/scripts/xmlrpc-capture.sh, which emits a small JSON envelope to
+  stdout ({"ok": true, "id": N} on success, {"ok": false, "faultCode": N}
+  on a fault) and mirrors the raw XML response to stderr.
 
-  All stdout carries the xmlrpc-capture.sh JSON envelope; the raw XML
-  response mirrors to stderr where expectPatterns matches.
-
-  Silent failures to watch for:
-  - Step 3 stderr contains the plan name but the response is actually a
-    fault envelope that happens to echo the name in an error message.
-  - Step 4 returns <boolean>1</boolean> but the plan still exists in the
-    DB (would block a second run). Container logs would show duplicate
-    insert failures on a retry.
-  - Create step responds with success but no id field in the envelope —
-    would fail expectPattern but worth calling out.
+  The read-back step uses tl.getTestPlanByName, which returns the plan
+  struct including its name — that's how the test confirms the plan
+  actually persisted with the right identity.
 
 criteria: |
-  PASS when:
-  - Step 2 stdout envelope is {"ok": true, "id": <number>}.
-  - Step 3 stderr contains the literal "plan-{{testId}}-{{runId}}".
-  - Steps 4 and 5 each return <boolean>1</boolean>.
+  The test creates a test plan, reads it back by name, then deletes it
+  along with its parent project. A reader looking at the logs should
+  see the tl.createTestPlan call return a new plan id, tl.getTestPlanByName
+  return a plan struct whose name field matches "plan-TC-PLAN-001-<runId>",
+  and tl.deleteTestPlan plus tl.deleteTestProject each return a boolean
+  success.
 
-  FAIL on any fault envelope, missing plan id on create, name mismatch on
-  read, or incomplete teardown.
+  Fail conditions: a fault envelope on any step, a read-back whose
+  name field differs from "plan-TC-PLAN-001-<runId>", or teardown
+  that doesn't return a clean boolean success.

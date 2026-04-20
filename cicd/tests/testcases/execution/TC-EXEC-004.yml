@@ -171,32 +171,25 @@ objective: |
   wrong result need a way to undo.
 
 judgeContext: |
-  Standard setup (project/suite/case/plan/attach/build) then report a
-  pass and capture the execution id from the response. Call
-  deleteExecution against it. Follow up with getLastExecutionResult and
-  assert the "no result" shape.
+  tl.deleteExecution is the correction path: when a result has been
+  reported wrong, the execution row can be removed. Once deleted,
+  tl.getLastExecutionResult should indicate that no execution exists
+  for that (plan, case) pair.
 
-  The "no result" shape from getLastExecutionResult varies by the
-  TestLink branch — commonly it's a struct with id=-1, or a
-  has_been_executed=false flag. The expectPattern accepts several
-  plausible sentinels so the test doesn't couple tightly to one shape.
+  TestLink signals "no execution on record" with a struct whose id
+  field is -1 (the sentinel), sometimes with a has_been_executed=0
+  flag alongside. The shape has varied across TestLink branches, so
+  multiple equivalent sentinels are accepted.
 
-  Silent failures to watch for:
-  - deleteExecution returns <boolean>1</boolean> but the execution row
-    is still there. Read-back would show the status, not the sentinel.
-    Pattern alternation catches this — no sentinel means fail.
-  - reportTCResult's response doesn't include the execution id field in
-    a capturable location. Fall back to reading all-executions before
-    delete if this surfaces.
+  The execution id for the delete call is captured from reportTCResult's
+  response envelope (the first integer in the response, per
+  xmlrpc-capture.sh's convention — the freshly-created execution's id).
 
 criteria: |
-  PASS when:
-  - Setup steps 1-6 complete (all IDs captured).
-  - Step 7 reports the result and returns an execution id.
-  - Step 8 (deleteExecution) returns <boolean>1</boolean>.
-  - Step 9 (read-back) contains a "no result" sentinel (id=-1 or
-    has_been_executed=0).
-  - Teardown steps 10-11 return <boolean>1</boolean>.
+  Pass: tl.deleteExecution returns boolean 1;
+  then tl.getLastExecutionResult returns id=-1 (the sentinel signalling
+  no execution on record). id=-1 IS the pass observable — it is what
+  "no execution" looks like in the API, not the absence of a response.
 
-  FAIL on any fault, failure of deleteExecution, or the execution still
-  showing up on read-back.
+  Fail: tl.deleteExecution carries a fault; or the read-back returns
+  a real execution id with a real status (the delete didn't stick).

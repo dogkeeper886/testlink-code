@@ -156,29 +156,23 @@ objective: |
   under-reports, release tracking silently lies.
 
 judgeContext: |
-  getTotalsForTestPlan returns a struct whose with_tester array contains
-  per-status counter structs keyed by status letter (p, f, b, n). Each
-  struct has an exec_qty field holding the count of executions with that
-  status on the plan. After one passing report, the "p" struct carries
-  exec_qty=1; other statuses carry exec_qty=0.
-
-  The evidence fragment "<name>exec_qty</name><value><string>1</string>"
-  appears in the response only when at least one status bucket has a
-  recorded execution. No execution counted on the plan means every
-  exec_qty stays at 0 and the fragment is absent.
+  tl.getTotalsForTestPlan returns a struct with a with_tester array
+  carrying per-status counter structs keyed by status letter (p, f, b, n).
+  Each counter has an exec_qty field holding the count of executions
+  with that status on the plan. After one passing report, the p bucket
+  carries exec_qty=1; the other status buckets stay at 0.
 
   Note: tl.getExecCountersByBuild is deliberately not exercised here.
   In this project's setup it returns build metadata in active_builds
   but leaves with_tester/total empty regardless of reported executions —
-  not a reliable counter surface. Tracking as a separate concern.
+  not a reliable counter surface. Tracked separately.
 
 criteria: |
-  PASS when:
-  - Steps 1-6 (setup) complete — each create returns a new id.
-  - Step 7 (reportTCResult) returns status:true.
-  - Step 8 stderr contains the literal fragment
-    "<name>exec_qty</name><value><string>1</string>".
-  - Steps 9-10 (teardown) each return <boolean>1</boolean>.
+  The test reports one passing execution via tl.reportTCResult, then
+  reads the plan's totals via tl.getTotalsForTestPlan. A reader looking
+  at the totals response should see the 'p' bucket carrying exec_qty=1
+  — the one reported pass was counted.
 
-  FAIL on any fault envelope, on step 8 showing only exec_qty=0 values,
-  or on absence of the exec_qty=1 fragment.
+  Fail conditions: the 'p' bucket reads exec_qty=0; a fault envelope
+  appears on any step; or the totals response is missing the with_tester
+  counter structure entirely.

@@ -159,36 +159,25 @@ objective: |
   product exists to do this.
 
 judgeContext: |
-  Ten steps. Setup (1-6) creates project / suite / case / plan / attach /
-  build. Exercise (7-8) reports a pass and reads it back. Teardown (9-10)
-  deletes plan (cascades builds + executions + attachments) and project.
+  TestLink records execution results per (test plan, build, test case)
+  triple. tl.reportTCResult is the write path — it creates a row in the
+  executions table and acknowledges with the new execution id.
+  tl.getLastExecutionResult is the read path — it returns the most
+  recent execution struct for a given (plan, case) pair, including
+  the status field.
 
-  Step 7 calls tl.reportTCResult with status="p". A successful response
-  contains status:true and may include an "overwrite" field.
-  Step 8 calls tl.getLastExecutionResult and the response stderr must
-  contain the literal XML sequence "<name>status</name><value><string>p</string>"
-  — the exact serialization of the status field with value "p" (passed).
-
-  Silent failures to watch for:
-  - Step 7 returns status:true but no row was written to the executions
-    table (the reportTCResult path has lots of pre-conditions around
-    platforms, version matching, and tester identity). Step 8 would then
-    show no last-execution record and expectPattern would miss.
-  - Step 8 stderr contains "status" and "p" in separate fields but NOT
-    as the execution status — e.g. the step field "expected_results"
-    happening to include "p". The exact XML fragment match in the
-    expectPattern guards against this.
-  - Plan teardown returns <boolean>1</boolean> but execution rows remain
-    orphaned in the DB. A second run with the same run-id would collide.
-    Run-id suffixes on all entity names keep re-runs safe in practice.
+  Status codes in the response are single characters: p (passed),
+  f (failed), b (blocked), or empty for no execution on record.
 
 criteria: |
-  PASS when:
-  - Steps 1-6 complete successfully (all setup IDs captured).
-  - Step 7 response contains status:true or an overwrite field.
-  - Step 8 stderr contains the literal fragment
-    "<name>status</name><value><string>p</string>".
-  - Steps 9-10 each return <boolean>1</boolean>.
+  The test reports a passing execution and then reads it back. A reader
+  looking at the logs should see the tl.reportTCResult call return a
+  success acknowledgement with a new execution id, and then the
+  tl.getLastExecutionResult response carry status 'p' (passed) for
+  the test case — the report landed and is retrievable. Teardown
+  should cleanly remove the plan (cascading its executions and builds)
+  and the project.
 
-  FAIL on any fault envelope, missing execution row on read-back, or
-  status mismatch.
+  Fail conditions: any fault envelope during setup, exercise, or
+  teardown; a read-back with a status other than 'p'; a read-back
+  that returns no execution at all.

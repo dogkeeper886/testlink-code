@@ -103,32 +103,26 @@ objective: |
   build CRUD is broken, release-tracking is broken.
 
 judgeContext: |
-  Seven steps setup → exercise → teardown:
-  1. Create parent project.
-  2. Create parent plan.
-  3. Create build under {{planId}} — capture buildId.
-  4. getBuildsForTestPlan — stderr response must include the literal
-     "build-{{testId}}-{{runId}}" string, proving the build is bound to
-     the plan and readable by name.
-  5. Explicit tl.deleteBuild (not closeBuild, not cascade) — this is the
-     key assertion for issue #8's new method.
-  6-7. Teardown plan + project in reverse order.
+  Builds in TestLink belong to a test plan, which belongs to a project —
+  so the test stands up that parent chain before exercising build CRUD.
+  The key step is the explicit tl.deleteBuild call (landed in issue #8);
+  before #8 there was only closeBuild, which marked builds inactive but
+  left the rows in place. This test proves the new delete path removes
+  the build cleanly.
 
-  Silent failures to watch for:
-  - Step 5 returns <boolean>1</boolean> but the build still exists in
-    the DB. A follow-up getBuildsForTestPlan would catch this, but we
-    don't run one here — flag if the plan teardown in step 6 complains
-    about orphan builds.
-  - Build list in step 4 includes the build but with a mangled name
-    (e.g. truncated or encoding issue) — the expectPattern would miss
-    the literal match.
+  getBuildsForTestPlan returns a list of build structs for a given plan;
+  each struct carries the build's id, name, notes, and active/closed
+  flags. A freshly-created build appears with active=1.
 
 criteria: |
-  PASS when:
-  - Steps 1-3 each return <name>id</name> with a new id captured.
-  - Step 4 stderr contains the literal "build-{{testId}}-{{runId}}".
-  - Step 5 (the deleteBuild call) returns <boolean>1</boolean>.
-  - Steps 6 and 7 each return <boolean>1</boolean>.
+  The test creates a build under a plan, lists the builds, then deletes
+  the build by id. A reader looking at the logs should see tl.createBuild
+  return a new build id, tl.getBuildsForTestPlan return a list that
+  contains a build whose name field is "build-TC-PLAN-002-<runId>", and
+  tl.deleteBuild return a boolean success — plus clean teardown of the
+  parent plan and project.
 
-  FAIL on any fault, missing build in the plan listing, or failure of
-  the new deleteBuild method.
+  Fail conditions: the list response from tl.getBuildsForTestPlan does
+  not contain a struct whose name is "build-TC-PLAN-002-<runId>";
+  tl.deleteBuild returns a fault; any fault envelope on setup or
+  teardown.

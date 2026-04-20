@@ -184,40 +184,33 @@ objective: |
   single op.
 
 judgeContext: |
-  Twelve steps — the dynamic-side analogue of TC-WORKFLOW-001 (which
-  covers the static setup graph). This one stitches everything: the
-  static entity graph, the plan layer (plan/build/attach), the execution
-  layer (report/read), and explicit teardown that exercises both new
-  issue-#8 methods (deleteBuild and removeTestCaseFromTestPlan) in their
-  intended roles.
+  This is the dynamic-side analogue of TC-WORKFLOW-001 (which covers
+  only the static project→suite→case graph). The claim here is that
+  every layer of the execution workflow — plan creation, case
+  attachment, build stamping, result reporting, and the explicit
+  teardown of each — works correctly when exercised as one continuous
+  sequence, not just per-entity.
 
-  Every entity name is W<runId>-prefixed so this test can co-exist with
-  TC-WORKFLOW-001 and the TC-EXEC-* tests in the same run without
-  colliding.
+  Entity names use a W<runId> prefix so this test can run alongside
+  TC-WORKFLOW-001 and the TC-EXEC-* tests in the same suite invocation
+  without colliding.
 
-  IMPORTANT FOR THE JUDGE: if every expectPatterns listed in criteria
-  matches, this test PASSES. The diagnostic notes below are hypothetical
-  failure modes — only flag them if the observations below actually show
-  the described symptom (wrong parent id in a response, fault envelope,
-  empty list, etc.). Do NOT invent a failure that the evidence doesn't
-  support.
-
-  Hypothetical failure modes (only relevant if the evidence shows them):
-  - getTestCasesForTestPlan returns empty → setup step silently created
-    the entity under the wrong parent.
-  - reportTCResult returns a fault envelope → case not actually attached.
-  - Teardown step returns <boolean>1</boolean> but a later cascade
-    complains about orphan rows in container logs.
+  TestLink status codes in the read-back response are single characters:
+  p (passed), f (failed), b (blocked), or empty for no execution.
 
 criteria: |
-  PASS when all twelve steps complete successfully:
-  - Steps 1-4 return new IDs (<name>id</name> on each).
-  - Step 5 (attach) returns feature_id or status:true.
-  - Step 6 returns a build id.
-  - Step 7 (reportTCResult) returns status:true.
-  - Step 8 read-back stderr contains the literal
-    "<name>status</name><value><string>p</string>".
-  - Steps 9-12 (teardown) each return <boolean>1</boolean>.
+  The test walks the entire lifecycle: create the entity graph, build
+  the plan scaffolding, report a pass, read it back, then dismantle
+  everything in reverse. A reader looking at the logs should see:
 
-  FAIL on any fault, missing pass-status on read-back, or failure of
-  either new issue-#8 teardown method.
+  - Every create returns a new entity id.
+  - The tl.reportTCResult call produces a success acknowledgement.
+  - The tl.getLastExecutionResult response carries status 'p' (passed)
+    for the test case — the report persisted and is retrievable.
+  - Each teardown step (tl.deleteBuild, tl.removeTestCaseFromTestPlan,
+    tl.deleteTestPlan, tl.deleteTestProject) returns its own success
+    acknowledgement.
+
+  Fail conditions: any step returns a fault envelope, the read-back
+  carries a status other than 'p', or teardown can't dismantle what
+  setup built.
