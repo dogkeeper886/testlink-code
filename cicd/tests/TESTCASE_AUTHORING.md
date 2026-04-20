@@ -67,15 +67,35 @@ Things that do **not** belong here:
 - Speculation about things that *could* go wrong but aren't specifically detectable from the evidence. Vague warnings prime the judge to hallucinate.
 - Instructions to the judge about how to reason. The judge's role is set at the framework level, not in your YAML.
 
-### `criteria` — *what does pass look like, narrated for a human?*
+### `criteria` — *narrated pass/fail, naming the terms a reader would notice*
 
-Plain-language pass/fail description. Read by the LLM judge, not the regex. If a human QA engineer were reading the logs over your shoulder, this is the running commentary you'd give them: *"the plan totals show one passing execution was counted"*, *"the fault envelope carries a real faultCode, not a silent zero-boolean"*, *"the build completed and the image was registered under the expected tag"*.
+Plain-language pass/fail description, read by the LLM judge. Two things matter:
 
-Ask yourself: *how would I describe this test's pass condition to a colleague?* If your answer is "stderr contains substring X at position Y" — that's simple-judge language; put it in the relevant step's `expectPatterns` instead. Save `criteria` for the semantic claim.
+1. **Narrated** — like commentary to a human colleague reading the logs over your shoulder, not a regex schema.
+2. **Named** — specific domain terms the reader would *point at*. "Status 'p' (passed)", "exec_qty of 1 in the p bucket", "faultCode 2000", "the build's sha256 id". Short, concrete nouns that actually appear in the evidence.
 
-Vague `criteria` ("the test should succeed", "the response looks reasonable") is too weak — it doesn't give the LLM anything concrete to anchor on. Over-specific `criteria` ("stderr contains exactly `<string>p</string>` at byte offset 465") forces the LLM into the regex's role. The sweet spot is narrated claims with just enough specificity that a human reader could verify them from the log alone.
+These two properties are both needed. Here are three phrasings of the same claim, showing the gradient:
 
-**Regex-facing patterns belong in each step's `expectPatterns`:** this is where literal fragments go. The simple judge enforces those character-for-character, fast and exactly. The LLM judge does not see them directly — it sees the evidence and your `criteria`, and independently forms a judgment.
+```
+BAD (regex-dictation):
+  Step 8 stderr contains the literal fragment
+  <name>status</name><value><string>p</string>.
+
+BAD (too abstract):
+  A reader should see the case as passed in the read-back.
+
+GOOD (narrated + named):
+  A reader should see the case returned with status 'p' (passed)
+  in the getLastExecutionResult response.
+```
+
+The first form forces the LLM to do the simple judge's job (character-level matching). The second form gives the LLM nothing specific to cite — it reasons correctly but then reaches into the raw observations for something to quote, often dumping a verbose XML block that blows the output budget. The third form narrates for a human *and* provides short named landmarks the LLM can lift into its `evidence` output without going long.
+
+**Named terms do double duty.** They make the criterion concrete enough for a human to verify, and they hand the LLM judge a short quotable anchor. Without them, the evidence field either paraphrases the criterion text (ungrounded) or dumps raw XML (truncates).
+
+**Ask yourself:** what specific domain term would a human point at in the log to say "yes, that's the pass"? *Status 'p'*. *exec_qty=1*. *faultCode 2000*. *The case's external id*. Put that in the criterion. You're not dictating a regex — you're naming a landmark.
+
+**Regex-facing patterns still belong in each step's `expectPatterns`.** This is where XML fragments and exact substrings go. The simple judge enforces those character-for-character. The LLM judge does not see `expectPatterns`; it sees the evidence and your `criteria`, and independently forms a judgment.
 
 ---
 
@@ -107,8 +127,10 @@ That's the regex-facing assertion. Character-exact, fast, no hallucination.
 > The evidence consists of two XML-RPC responses: one from `reportTCResult` (a report acknowledgement), one from `getLastExecutionResult` (the read-back). TestLink encodes execution status as a single character: `p` (passed), `f` (failed), `b` (blocked), empty for no-execution. The read-back response is the source of truth — if it carries `status=f`, the failure was persisted correctly.
 
 `criteria`:
-> Pass: the fail report is acknowledged, and the read-back response shows the same case as failed. A human reading the logs should see both the acknowledgement and the post-report state matching.
-> Fail: the read-back shows a different status, or a fault envelope indicates the report didn't persist.
+> Pass: the fail report is acknowledged, and the read-back response returns the case with status 'f' (failed). A human reading the logs should see the acknowledgement on the report call and the 'f' status field on the getLastExecutionResult struct.
+> Fail: the read-back shows a status other than 'f', or a fault envelope indicates the report didn't persist.
+
+Notice the criterion names *specific terms a reader would point at* — "status 'f' (failed)", "getLastExecutionResult". These are narration, not regex, but they're concrete enough that the LLM judge can cite them short-form when it writes its `evidence` output. Compare with a too-abstract version — *"the read-back response shows the case as failed"* — which reads fine to a human but leaves the LLM with nothing short to quote, so it reaches into raw XML and often truncates.
 
 Notice what's *not* in the `criteria`: character-level substrings. Those went into `expectPatterns`, where they belong. The `criteria` is narrated for a reader; the regex does the character-level work.
 

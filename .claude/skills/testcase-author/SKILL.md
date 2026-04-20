@@ -76,6 +76,11 @@ Only after the warm-up, walk the fields with these questions.
 - Test-level `criteria` should narrate pass/fail for a human reader, not restate the substrings. If the `criteria` field reads like a list of regex patterns with field paths, that's a finding: the claim has been pushed to the wrong judge. The LLM judge gets worse when forced into the regex's role.
 - If `expectPatterns` alternates on `A|B`, each alternative must independently prove the claim — otherwise a fault response that happens to include one of the fields will pass silently.
 
+### Does `criteria` name the specific terms a reader would point at?
+- Narration without named landmarks is a trap. *"A reader should see the case as passed"* is too abstract — the LLM judge has nothing short to quote in its `evidence` output, so it dumps raw XML and truncates the JSON.
+- *"A reader should see the case returned with status 'p' (passed) in the getLastExecutionResult response"* names specific terms — "status 'p'", "getLastExecutionResult" — that are both human-verifiable and short-quotable.
+- The check: ask whether the criterion contains at least one short concrete noun (a status letter, a count, a specific field name, an id format) that actually appears in the evidence. If not, flag as **should fix** — the LLM will either paraphrase (ungrounded) or dump long quotes (truncate).
+
 ### Are the three test-level fields doing different work?
 - `objective` states the claim. `judgeContext` adds interpretive context (domain knowledge). `criteria` narrates pass/fail in human terms.
 - Do they overlap or restate each other? Each should be doing its own job.
