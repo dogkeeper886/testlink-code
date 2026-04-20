@@ -47,6 +47,19 @@ To see what skills currently exist here: `ls .claude/skills/`. Each skill's purp
 - A test is green only when both the simple judge (pattern match) and the LLM judge (semantic review) agree. A disagreement usually means one of them is wrong — read the reason before deciding which.
 - LLM judge configuration lives in `cicd/tests/.env` (`LLM_JUDGE_URL`, `LLM_JUDGE_MODEL`).
 
+## The two judges have different jobs — do not make them compete
+
+This is a design principle, not a mechanical rule. Get it wrong and the suite gets noisier without getting sharper.
+
+- **Simple judge (regex):** literal character and string matching. Its job is to enforce *exact fragments must be present*. Configured per-step via `expectPatterns`.
+- **LLM judge (semantic):** the common-sense read a human QA would bring to a log. Its job is to catch *silent failures where the regex passes but the result is wrong* — counters that look populated but aren't, builds that completed mid-stream, status fields with unexpected neighboring values. Configured per-test via `criteria` + `judgeContext` + `objective`.
+
+They are **complementary**, not redundant. The simple judge's guarantees (exact match, no hallucination, fast) free the LLM judge to do what only it can — apply general engineering judgment to output it's seeing for the first time.
+
+**Author anti-pattern:** writing test-level `criteria` that are essentially regex patterns — *"stderr contains exactly `<name>status</name><value><string>p</string>`"*. This forces the LLM to do the simple judge's job, which it does worse (hallucinations, off-by-one, long-context confusion). The right shape is the opposite: put the exact fragment in the step's `expectPatterns` where regex enforces it; describe pass/fail in `criteria` the way a human engineer would narrate it — *"the plan's totals show one passing execution was counted"*.
+
+A useful test: would you describe this pass/fail condition the same way to a human colleague reading the log over your shoulder? If yes, it's LLM-judge language. If you'd instead point at a specific substring, it's simple-judge language — put it in `expectPatterns`.
+
 ## Rules
 
 - Don't use `sudo` with docker. The user is in the docker group — if a docker command fails with a permission error, something is wrong, stop and report rather than escalating.
