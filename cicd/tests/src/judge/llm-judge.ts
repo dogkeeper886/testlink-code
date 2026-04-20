@@ -78,12 +78,12 @@ export class LLMJudge {
       `Respond with exactly one JSON object — no prose, no code fences, no thinking tokens. Schema:`,
       `{"testId": string, "pass": boolean, "reason": string, "evidence": string}`,
       `- testId   : echo the test id from the OBJECTIVE block verbatim.`,
-      `- pass     : true if criteria met, false otherwise.`,
+      `- pass     : true if criteria met, false otherwise. Must agree with the reason — if your reason describes success, pass must be true.`,
       `- reason   : one short sentence (<= 25 words) grounded in the observations.`,
-      `- evidence : the exact line(s) from OBSERVATIONS that drove the verdict; required when pass is false, otherwise "".`,
+      `- evidence : a short quote (<= 120 characters) copied verbatim from OBSERVATIONS — a single field value, not a step block. Do NOT escape newlines or embed multi-line XML; pick the shortest substring that proves your verdict. Empty string ("") is acceptable if no single short quote is representative.`,
       ``,
-      `Example pass : {"testId":"TC-X-001","pass":true,"reason":"Login page returned the expected 'Login' marker.","evidence":""}`,
-      `Example fail : {"testId":"TC-X-002","pass":false,"reason":"Build appeared to succeed but skipped composer install.","evidence":"CACHED [stage 3/5]"}`,
+      `Example pass : {"testId":"TC-X-001","pass":true,"reason":"Login page returned the expected 'Login' marker.","evidence":"STDOUT: Login"}`,
+      `Example fail : {"testId":"TC-X-002","pass":false,"reason":"Build exited 0 but skipped composer install.","evidence":"CACHED [stage 3/5]"}`,
     ].join('\n');
 
     const stepsBlock = r.steps.map((step, j) => {
@@ -221,6 +221,11 @@ export class LLMJudge {
         judgment.reason = judgment.pass ? 'Passed (no reason provided)' : 'Failed (no reason provided)';
       }
 
+      // Post-process: evidence grounding + reason/pass consistency checks.
+      // These don't override the verdict — they annotate it so downstream
+      // reporting and human triage can spot suspect verdicts.
+      this.annotateVerdict(judgment, result);
+
       return judgment;
     } catch {
       process.stderr.write(`  [LLM] WARNING: Failed to parse JSON for ${testId}\n`);
@@ -230,6 +235,100 @@ export class LLMJudge {
         pass: false,
         reason: `Failed to parse LLM response: ${responseText.substring(0, 200)}`,
       };
+    }
+  }
+
+  /**
+   * Annotate a parsed verdict with quality flags:
+   *   - evidenceGrounded: the evidence field appears as a substring of
+   *     the observations (stdout / stderr / container logs). If not,
+   *     the model paraphrased a criterion or hallucinated.
+   *   - reasonConsistent: the reason's sentiment matches the pass
+   *     boolean. A success-shaped reason with pass:false (or the
+   *     reverse) usually means JSON-mode commit order got ahead of
+   *     the model's reasoning.
+   * Neither flag overrides the verdict. They surface suspect verdicts
+   * for human triage and for debugging the judge itself.
+   */
+  private annotateVerdict(judgment: Judgment, result: TestResult): void {
+    // --- evidence grounding ---
+    // The model often writes evidence as a short narration that includes
+    // specific facts lifted from the observations ("Step 4 stderr contains
+    // 'case-TC-X-17766...'"). Requiring the full evidence string to be a
+    // verbatim substring is too strict — it flags legitimate citations
+    // that wrap a real fact in scaffolding.
+    //
+    // Looser check: treat evidence as "grounded" if any meaningful-length
+    // substring (>= 15 chars) of the normalised evidence appears in the
+    // normalised observations. 15 chars is enough to filter out common
+    // English words but catches entity names, run ids, SHA hashes, status
+    // field fragments, etc. Pure fabrication rarely clears this bar.
+    const evidence = (judgment.evidence || '').trim();
+    if (evidence.length > 0) {
+      const haystack = [
+        ...result.steps.map((s) => s.stdout),
+        ...result.steps.map((s) => s.stderr),
+        result.logs,
+      ].join('\n');
+
+      const normalise = (s: string) =>
+        s
+          .replace(/\\[nrt]/g, ' ') // literal \n / \r / \t
+          .replace(/\s+/g, ' ')     // actual whitespace
+          .trim();
+
+      const normEvidence = normalise(evidence);
+      const normHaystack = normalise(haystack);
+      const MIN = 15;
+      let grounded = normEvidence.length < MIN
+        ? normHaystack.includes(normEvidence)        // evidence is short — require full match
+        : false;
+
+      if (!grounded && normEvidence.length >= MIN) {
+        // Slide a MIN-char window over the evidence; first hit wins.
+        for (let i = 0; i <= normEvidence.length - MIN; i++) {
+          if (normHaystack.includes(normEvidence.substring(i, i + MIN))) {
+            grounded = true;
+            break;
+          }
+        }
+      }
+
+      judgment.evidenceGrounded = grounded;
+
+      if (!grounded) {
+        process.stderr.write(
+          `  [LLM] WARNING: Evidence not grounded for ${judgment.testId}: ${evidence.substring(0, 100)}\n`
+        );
+      }
+    }
+
+    // --- reason ↔ pass consistency ---
+    const reason = (judgment.reason || '').toLowerCase();
+    // Strong positive / negative markers. Intentionally narrow — false
+    // positives on a noisy signal are worse than missed detections.
+    const positiveMarkers = [
+      'successfully', 'successful', 'as expected', 'correctly', 'works correctly',
+      'meeting the criteria', 'met the criteria', 'passed all', 'all steps passed',
+    ];
+    const negativeMarkers = [
+      'failed to', 'did not', 'does not', 'missing the expected', 'not contain',
+      'violating', 'regression', 'silently failed', 'incorrect',
+    ];
+    const hasPositive = positiveMarkers.some((m) => reason.includes(m));
+    const hasNegative = negativeMarkers.some((m) => reason.includes(m));
+
+    // If both or neither, we can't tell — leave the flag undefined.
+    if (hasPositive && !hasNegative) {
+      judgment.reasonConsistent = judgment.pass === true;
+    } else if (hasNegative && !hasPositive) {
+      judgment.reasonConsistent = judgment.pass === false;
+    }
+
+    if (judgment.reasonConsistent === false) {
+      process.stderr.write(
+        `  [LLM] WARNING: Reason/pass mismatch for ${judgment.testId} (pass=${judgment.pass}, reason="${reason.substring(0, 100)}")\n`
+      );
     }
   }
 

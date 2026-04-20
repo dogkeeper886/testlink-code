@@ -1,7 +1,7 @@
 ---
 fr: FR-004
 title: LLM judge — enforce grounded evidence citations
-status: draft
+status: done
 issue: https://github.com/dogkeeper886/testlink-code/issues/14
 authors: ["dogkeeper886"]
 created: 2026-04-20
@@ -13,7 +13,7 @@ updated: 2026-04-20
 ## Tracking
 
 - GitHub issue: [#14](https://github.com/dogkeeper886/testlink-code/issues/14)
-- Status: draft
+- Status: done
 - Depends on: None
 - Blocks: None (quality improvement; does not gate correctness)
 
@@ -124,3 +124,13 @@ Probably overkill for a first cut; add only if Layers 1+2 leave too much noise.
 
 - Changing test authoring guidance. The testcase-author skill and `TESTCASE_AUTHORING.md` remain as-is — this FR does not push new requirements onto test authors.
 - Multi-judge arbitration. If Layers 1-3 aren't enough, a future FR could explore running two judges and comparing.
+
+## Resolution
+
+Landed by PR #16. Layers 1 and 2 implemented; Layer 3 (retry-with-correction) deferred as current accuracy (19/19 LLM judge across two consecutive runs) does not justify the complexity.
+
+- System prompt tightened: evidence ≤ 120 chars verbatim; pass must agree with reason.
+- `Judgment.evidenceGrounded` flag added via 15-char sliding-window substring check against observations.
+- `Judgment.reasonConsistent` flag added via positive/negative sentiment marker check vs the pass boolean.
+- Console reporter surfaces `[suspect]` lines for either flag being false.
+- Empirical: LLM judge moved from 16–17/19 flaky to 19/19 clean on the existing suite. 18/19 evidence fields grounded; the one outlier (TC-BUILD-003's 13-char `stdout: valid`) is a legitimate stylistic edge case.

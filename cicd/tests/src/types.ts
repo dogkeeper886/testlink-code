@@ -124,6 +124,19 @@ export interface Judgment {
   reason: string;
   /** Evidence log line (required when pass=false) */
   evidence?: string;
+  /**
+   * True if the `evidence` field was found as a substring of the
+   * observations. False means the model quoted a paraphrase or
+   * hallucinated. Undefined when evidence is empty (pass cases) or
+   * grounding could not be checked.
+   */
+  evidenceGrounded?: boolean;
+  /**
+   * True if the `reason` text semantically agrees with the `pass`
+   * boolean. False flags the JSON-mode contradiction where the model
+   * wrote a success-shaped reason but set pass:false (or vice versa).
+   */
+  reasonConsistent?: boolean;
 }
 
 // ============================================
