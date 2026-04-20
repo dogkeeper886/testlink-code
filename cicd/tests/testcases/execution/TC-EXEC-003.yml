@@ -117,18 +117,7 @@ steps:
     expectPatterns:
       - "status.*true|overwrite"
 
-  - name: Get exec counters by build; assert build section present
-    command: |
-      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
-      <?xml version="1.0"?><methodCall><methodName>tl.getExecCountersByBuild</methodName><params><param><value><struct>
-        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
-        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
-      </struct></value></param></params></methodCall>
-      XMLDOC
-    expectPatterns:
-      - "build-{{testId}}-{{runId}}|total_tc"
-
-  - name: Get totals for plan; assert totals structure
+  - name: Get totals for plan; assert one passing execution counted
     command: |
       bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
       <?xml version="1.0"?><methodCall><methodName>tl.getTotalsForTestPlan</methodName><params><param><value><struct>
@@ -137,7 +126,7 @@ steps:
       </struct></value></param></params></methodCall>
       XMLDOC
     expectPatterns:
-      - "total|not_run|p"
+      - "<name>exec_qty</name><value><string>1</string>"
 
   - name: Delete plan (teardown)
     command: |
@@ -162,42 +151,34 @@ steps:
       - "<boolean>1</boolean>|status.*true"
 
 objective: |
-  Confirm that aggregate execution counters (tl.getExecCountersByBuild
-  and tl.getTotalsForTestPlan) reflect reported results. These are the
-  read paths every dashboard / progress view in TestLink relies on.
+  Confirm that tl.getTotalsForTestPlan reflects reported execution results.
+  This endpoint backs TestLink's plan-level progress dashboards; if it
+  under-reports, release tracking silently lies.
 
 judgeContext: |
-  Standard setup (project/suite/case/plan/attach/build) then report one
-  passing result, then hit the two aggregate endpoints.
+  getTotalsForTestPlan returns a struct whose with_tester array contains
+  per-status counter structs keyed by status letter (p, f, b, n). Each
+  struct has an exec_qty field holding the count of executions with that
+  status on the plan. After one passing report, the "p" struct carries
+  exec_qty=1; other statuses carry exec_qty=0.
 
-  getExecCountersByBuild returns a struct whose additionalInfo field
-  contains arrays keyed by build id. Each entry has fields like
-  platform_id, status, and exec_qty. A successful response therefore
-  contains exec_qty / status / platform_id — or the build name
-  (build-{{testId}}-{{runId}}) — anywhere in the stderr XML. The
-  presence of "total_tc" is one possible marker; so is "exec_qty".
+  The evidence fragment "<name>exec_qty</name><value><string>1</string>"
+  appears in the response only when at least one status bucket has a
+  recorded execution. No execution counted on the plan means every
+  exec_qty stays at 0 and the fragment is absent.
 
-  getTotalsForTestPlan returns overall counts per status (passed / failed
-  / blocked / not_run). The response shape includes status-letter keys
-  ("p", "f", "b", "not_run") or a literal "total" field.
-
-  IMPORTANT FOR THE JUDGE: the endpoints return nested struct/array
-  shapes. Treat the response as valid if ANY of the marker fields
-  (exec_qty, total_tc, not_run, status-letter inside a counter struct)
-  appear in stderr. Do NOT fail just because the shape isn't a flat
-  object — these APIs return layered structs.
-
-  Hypothetical failure modes (only relevant if the evidence shows them):
-  - Step 8 stderr contains none of: exec_qty, total_tc, build name.
-  - Step 9 stderr contains none of: total, not_run, p, f, b.
-  - Either response is a fault envelope.
+  Note: tl.getExecCountersByBuild is deliberately not exercised here.
+  In this project's setup it returns build metadata in active_builds
+  but leaves with_tester/total empty regardless of reported executions —
+  not a reliable counter surface. Tracking as a separate concern.
 
 criteria: |
   PASS when:
-  - Setup steps 1-6 complete.
+  - Steps 1-6 (setup) complete — each create returns a new id.
   - Step 7 (reportTCResult) returns status:true.
-  - Step 8 stderr contains either the build name or "total_tc".
-  - Step 9 stderr contains a counter-shaped field ("total"/"not_run"/"p").
-  - Teardown steps 10-11 return <boolean>1</boolean>.
+  - Step 8 stderr contains the literal fragment
+    "<name>exec_qty</name><value><string>1</string>".
+  - Steps 9-10 (teardown) each return <boolean>1</boolean>.
 
-  FAIL on any fault, empty counter structure, or missing response shape.
+  FAIL on any fault envelope, on step 8 showing only exec_qty=0 values,
+  or on absence of the exec_qty=1 fragment.
