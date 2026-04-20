@@ -1,7 +1,7 @@
 ---
 fr: FR-005
 title: Wire GitHub Actions runner with env vars + secrets for the CI suite
-status: in-progress
+status: landed-with-revision
 issue: https://github.com/dogkeeper886/testlink-code/issues/19
 authors: ["dogkeeper886"]
 created: 2026-04-20
@@ -10,10 +10,23 @@ updated: 2026-04-20
 
 # FR-005 — GitHub Actions runner env vars + secrets
 
+## Update — 2026-04-20 (post-landing revision)
+
+The original proposal (below) routed `LLM_JUDGE_URL` and `LLM_JUDGE_MODEL` through GitHub `secrets`/`vars` and explicitly *rejected* the runner-local `.env` alternative. That landed, and then we reversed it in [PR #32](https://github.com/dogkeeper886/testlink-code/pull/32): the LLM judge config now lives in the self-hosted runner's root `.env` (`/usr/local/actions-runner-testlink-code/.env`), matching the convention used by the sibling `actions-runner-ruckus1-mcp` install.
+
+**Why the reversal:** the GH-secrets route was duplicate state. The URL is host-specific (only the runner can route to the LAN Ollama), so it already had to match what the host could reach. Putting it in GH on top of that created two places to keep in sync for zero benefit. The "writes secrets to disk" concern in the original *Alternatives considered* doesn't apply for a LAN URL and a model tag — neither is a real secret.
+
+**Current state:**
+- `TL_DEV_KEY` is still a GH secret (actual per-environment credential).
+- `LLM_JUDGE_URL` / `LLM_JUDGE_MODEL` come from the runner's process env on self-hosted.
+- See `cicd/CI_SETUP.md` "Set the LLM endpoint" for the operational how-to.
+
+The sections below are preserved as written to record the original reasoning; treat them as historical context, not current guidance.
+
 ## Tracking
 
 - GitHub issue: [#19](https://github.com/dogkeeper886/testlink-code/issues/19)
-- Status: draft
+- Status: landed with post-landing revision (PR #21 + PR #32)
 - Depends on: None
 - Blocks: Re-enabling automatic workflow triggers (push / PR) — all workflows are currently `workflow_dispatch` only.
 
