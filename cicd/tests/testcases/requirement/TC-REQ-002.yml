@@ -1,0 +1,126 @@
+id: TC-REQ-002
+name: Requirement CRUD under spec
+suite: requirement
+priority: 2
+timeout: 60000
+dependencies:
+  - TC-REQ-001
+
+steps:
+  - name: Create parent project (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>RQ{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      projectId: "id"
+
+  - name: Create parent requirement specification (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createRequirementSpecification</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>requirementdocid</name><value><string>RS-{{testId}}-{{runId}}</string></value></member>
+        <member><name>title</name><value><string>spec-{{testId}}-{{runId}}</string></value></member>
+        <member><name>scope</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      specId: "id"
+
+  - name: Create requirement under the spec
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createRequirement</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>reqspecid</name><value><int>{{specId}}</int></value></member>
+        <member><name>requirementdocid</name><value><string>R-{{testId}}-{{runId}}-1</string></value></member>
+        <member><name>title</name><value><string>req-{{testId}}-{{runId}}</string></value></member>
+        <member><name>scope</name><value><string>Created by {{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      reqId: "id"
+
+  - name: Read requirement back by id
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getRequirement</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>requirementid</name><value><int>{{reqId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "R-{{testId}}-{{runId}}-1"
+
+  - name: Delete requirement (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteRequirement</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>requirementid</name><value><int>{{reqId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete spec (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteRequirementSpecification</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>reqspecid</name><value><int>{{specId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete parent project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>RQ{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+objective: |
+  Confirm the Requirement entity supports full CRUD under a parent
+  spec via XML-RPC. Requirements are the leaf entity in TestLink's
+  compliance/traceability surface — every downstream feature
+  (assignment to cases, coverage reports) depends on this CRUD path
+  working.
+
+judgeContext: |
+  A requirement in TestLink lives under a requirement specification,
+  which lives under a project. Each requirement has a doc_id
+  (unique within the project) and a title. tl.createRequirement
+  returns the new requirement id in the struct's "id" field, and
+  the existing tl.getRequirement returns a struct whose "req_doc_id"
+  field carries the doc_id that was set at create time.
+
+criteria: |
+  Pass: tl.createRequirement returns a new requirement id;
+  tl.getRequirement response contains the literal req_doc_id
+  "R-{{testId}}-{{runId}}-1" (confirming the requirement persisted
+  with the correct identity); tl.deleteRequirement returns boolean 1;
+  the spec delete and project delete each return boolean 1.
+
+  Fail: any step returns a fault envelope; the read-back doesn't
+  carry the expected req_doc_id; any teardown fails to acknowledge.
