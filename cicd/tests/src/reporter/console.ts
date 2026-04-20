@@ -38,6 +38,13 @@ export class ConsoleReporter {
       if (!report.llmJudge.pass && report.llmJudge.evidence) {
         console.log(`  ${chalk.yellow('Evidence:')} ${report.llmJudge.evidence}`);
       }
+      // Surface post-process quality flags so suspect verdicts don't hide.
+      if (report.llmJudge.evidenceGrounded === false) {
+        console.log(`  ${chalk.yellow('[suspect]')} Evidence not grounded in observations (model paraphrased or hallucinated)`);
+      }
+      if (report.llmJudge.reasonConsistent === false) {
+        console.log(`  ${chalk.yellow('[suspect]')} Reason text contradicts pass boolean (likely JSON-mode commit artifact)`);
+      }
 
       if (report.logFile) {
         console.log(`  Log file: ${report.logFile}`);
