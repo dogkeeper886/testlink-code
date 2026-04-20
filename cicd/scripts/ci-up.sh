@@ -12,12 +12,22 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/../docker-compose.ci.yml"
 
 # Allow direct invocation (outside run-tests.sh) to still pick up .env values.
+# Caller-wins: variables already in the inherited environment are left alone,
+# so an override like `TL_DEV_KEY=... bash ci-up.sh` takes effect. Note that
+# .env is read as literal `key=value` lines — no bash interpolation, no
+# quote-stripping — which differs from the previous `. "$ENV_FILE"` loader.
+# Correlated vars (e.g. TL_PORT / TL_URL) must be overridden together.
 ENV_FILE="$SCRIPT_DIR/../tests/.env"
 if [ -f "$ENV_FILE" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$ENV_FILE"
-  set +a
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|\#*) continue ;; esac
+    case "$line" in *=*) ;; *) continue ;; esac
+    key="${line%%=*}"
+    value="${line#*=}"
+    if [ -z "${!key+set}" ]; then
+      export "$key=$value"
+    fi
+  done < "$ENV_FILE"
 fi
 
 TL_URL="${TL_URL:-http://localhost:${TL_PORT:-8091}}"

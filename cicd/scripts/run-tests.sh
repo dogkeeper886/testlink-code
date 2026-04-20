@@ -22,12 +22,21 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Load cicd/tests/.env if present so LLM_JUDGE_URL / LLM_JUDGE_MODEL etc.
 # reach the tsx CLI. Keep it optional — absent .env means rely on defaults.
+# Caller-wins: a variable already present in the inherited environment is
+# left alone, so `LLM_JUDGE_URL=... bash run-tests.sh ...` works as expected.
+# .env is read as literal `key=value` lines — no bash interpolation, no
+# quote-stripping — which differs from the previous `. "$ENV_FILE"` loader.
 ENV_FILE="$REPO_ROOT/cicd/tests/.env"
 if [ -f "$ENV_FILE" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$ENV_FILE"
-  set +a
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|\#*) continue ;; esac
+    case "$line" in *=*) ;; *) continue ;; esac
+    key="${line%%=*}"
+    value="${line#*=}"
+    if [ -z "${!key+set}" ]; then
+      export "$key=$value"
+    fi
+  done < "$ENV_FILE"
 fi
 
 # Defaults for values .env provides locally but CI runners don't (no .env
