@@ -1,0 +1,107 @@
+id: TC-PLAN-001
+name: Test plan CRUD
+suite: plan
+priority: 1
+timeout: 60000
+dependencies:
+  - TC-AUTH-001
+
+steps:
+  - name: Create parent project (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>PP{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      projectId: "id"
+
+  - name: Create test plan
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanname</name><value><string>plan-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>Created by {{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      planId: "id"
+
+  - name: Read plan back by name
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getTestPlanByName</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanname</name><value><string>plan-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "plan-{{testId}}-{{runId}}"
+
+  - name: Delete plan (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestPlan</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testplanid</name><value><int>{{planId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete parent project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>PP{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+objective: |
+  Confirm the Test Plan entity supports CRUD under a project. Test Plan is
+  the anchor for every execution activity in TestLink — if plan CRUD is
+  broken, no test can be scheduled, no build can be stamped, no result
+  can be recorded.
+
+judgeContext: |
+  Four steps via xmlrpc-capture.sh:
+  1. Create parent project (needed because plans belong to a project).
+  2. Create plan under {{projectId}} with a unique name — capture planId.
+  3. Read the plan back by name+project — response stderr must contain
+     the literal "plan-{{testId}}-{{runId}}" string.
+  4. Delete plan by captured ID, then delete project by prefix.
+
+  All stdout carries the xmlrpc-capture.sh JSON envelope; the raw XML
+  response mirrors to stderr where expectPatterns matches.
+
+  Silent failures to watch for:
+  - Step 3 stderr contains the plan name but the response is actually a
+    fault envelope that happens to echo the name in an error message.
+  - Step 4 returns <boolean>1</boolean> but the plan still exists in the
+    DB (would block a second run). Container logs would show duplicate
+    insert failures on a retry.
+  - Create step responds with success but no id field in the envelope —
+    would fail expectPattern but worth calling out.
+
+criteria: |
+  PASS when:
+  - Step 2 stdout envelope is {"ok": true, "id": <number>}.
+  - Step 3 stderr contains the literal "plan-{{testId}}-{{runId}}".
+  - Steps 4 and 5 each return <boolean>1</boolean>.
+
+  FAIL on any fault envelope, missing plan id on create, name mismatch on
+  read, or incomplete teardown.
