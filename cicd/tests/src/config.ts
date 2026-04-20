@@ -40,7 +40,7 @@ export const CONFIG = {
   // --judge-model CLI flags.
   llm: {
     defaultUrl: process.env.LLM_JUDGE_URL || 'http://localhost:11434',
-    defaultModel: process.env.LLM_JUDGE_MODEL || 'llama3:8b',
+    defaultModel: process.env.LLM_JUDGE_MODEL || 'gemma3:4b',
     timeout: 300000,
     stdoutLimit: 1000,
     stderrLimit: 500,

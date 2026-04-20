@@ -19,6 +19,7 @@ jobs:
   build:
     name: Build Tests
     uses: ./.github/workflows/test-suite.yml
+    secrets: inherit
     with:
       suite: build
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
@@ -27,6 +28,7 @@ jobs:
     name: Smoke Tests
     needs: build
     uses: ./.github/workflows/test-suite.yml
+    secrets: inherit
     with:
       suite: smoke
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
@@ -35,6 +37,7 @@ jobs:
     name: Auth Tests
     needs: smoke
     uses: ./.github/workflows/test-suite.yml
+    secrets: inherit
     with:
       suite: auth
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
@@ -43,6 +46,7 @@ jobs:
     name: CRUD Tests
     needs: auth
     uses: ./.github/workflows/test-suite.yml
+    secrets: inherit
     with:
       suite: crud
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
@@ -51,6 +55,7 @@ jobs:
     name: Workflow Tests
     needs: crud
     uses: ./.github/workflows/test-suite.yml
+    secrets: inherit
     with:
       suite: workflow
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
