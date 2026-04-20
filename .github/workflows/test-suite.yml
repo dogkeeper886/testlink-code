@@ -85,11 +85,11 @@ jobs:
       - name: Run tests
         id: run-tests
         env:
-          # TL_DEV_KEY is the only LLM/credential value still flowed via GH
-          # secrets — the runner's process env supplies LLM_JUDGE_URL and
-          # LLM_JUDGE_MODEL on self-hosted (see CI_SETUP.md "Set the LLM
-          # endpoint"), and hosted runners don't run dual mode. When unset,
-          # the scripts' defaults kick in (see cicd/scripts/init-db.sh).
+          # TL_DEV_KEY is the only credential still flowed via GH secrets;
+          # init-db.sh's default seeds the admin key when it's unset.
+          # LLM_JUDGE_URL and LLM_JUDGE_MODEL come from the self-hosted
+          # runner's process env (see CI_SETUP.md "Set the LLM endpoint").
+          # Hosted runners have neither — dual mode isn't supported there.
           TL_DEV_KEY: ${{ secrets.TL_DEV_KEY }}
         run: |
           # Build judge flags based on input.
