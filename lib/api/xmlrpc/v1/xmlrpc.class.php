@@ -9231,8 +9231,33 @@ class TestlinkXMLRPCServer extends IXR_Server {
 
             if(is_null( $rs ) || count( $rs ) == 0) {
                 $status_ok = false;
-                $msg = $messagePrefix . sprintf( "Test case id:%d is not linked to test plan id:%d", $tcase_id, $tplan_id );
-                $this->errors[] = new IXR_Error( -32001, $msg );
+                // Use existing "not associated" error codes — same shape the
+                // codebase uses for related failures (3030 / 3042). Look up
+                // names so the i18n strings get their %s slots filled.
+                $tcase_info = $this->tcaseMgr->get_by_id( $tcase_id );
+                $tcase_name = isset( $tcase_info[0]['name'] ) ? $tcase_info[0]['name'] : '';
+                $tplan_info = $this->tplanMgr->get_by_id( $tplan_id );
+                $tplan_name = isset( $tplan_info['name'] ) ? $tplan_info['name'] : '';
+
+                if($platform_filter !== '') {
+                    $platform_info = $this->tplanMgr->getPlatforms( $tplan_id );
+                    $platform_name = '';
+                    if(is_array( $platform_info )) {
+                        foreach( $platform_info as $p ) {
+                            if(isset( $p['id'] ) && intval( $p['id'] ) === $platform_id) {
+                                $platform_name = $p['name'];
+                                break;
+                            }
+                        }
+                    }
+                    $msg = $messagePrefix . sprintf( TCASEID_NOT_IN_TPLANID_FOR_PLATFORM_STR,
+                            $tcase_name, $tcase_id, $tplan_name, $tplan_id, $platform_name, $platform_id );
+                    $this->errors[] = new IXR_Error( TCASEID_NOT_IN_TPLANID_FOR_PLATFORM, $msg );
+                } else {
+                    $msg = $messagePrefix . sprintf( TCASEID_NOT_IN_TPLANID_STR,
+                            $tcase_name, $tcase_id, $tplan_name, $tplan_id );
+                    $this->errors[] = new IXR_Error( TCASEID_NOT_IN_TPLANID, $msg );
+                }
             } else {
                 foreach( $rs as $row ) {
                     $tcv = intval( $row['tcversion_id'] );
