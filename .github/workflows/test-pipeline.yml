@@ -14,6 +14,14 @@ on:
         options:
           - "simple"
           - "dual"
+      runner:
+        description: "Runner to dispatch on. Use self-hosted to reach LAN Ollama."
+        required: false
+        default: "ubuntu-latest"
+        type: choice
+        options:
+          - "ubuntu-latest"
+          - "self-hosted"
 
 jobs:
   build:
@@ -23,6 +31,7 @@ jobs:
     with:
       suite: build
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
+      runner: ${{ inputs.runner || 'ubuntu-latest' }}
 
   smoke:
     name: Smoke Tests
@@ -32,6 +41,7 @@ jobs:
     with:
       suite: smoke
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
+      runner: ${{ inputs.runner || 'ubuntu-latest' }}
 
   auth:
     name: Auth Tests
@@ -41,6 +51,7 @@ jobs:
     with:
       suite: auth
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
+      runner: ${{ inputs.runner || 'ubuntu-latest' }}
 
   crud:
     name: CRUD Tests
@@ -50,6 +61,7 @@ jobs:
     with:
       suite: crud
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
+      runner: ${{ inputs.runner || 'ubuntu-latest' }}
 
   workflow:
     name: Workflow Tests
@@ -59,3 +71,4 @@ jobs:
     with:
       suite: workflow
       judge_mode: ${{ inputs.judge_mode || 'simple' }}
+      runner: ${{ inputs.runner || 'ubuntu-latest' }}

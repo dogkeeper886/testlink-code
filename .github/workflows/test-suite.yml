@@ -29,6 +29,14 @@ on:
         required: false
         default: ""
         type: string
+      runner:
+        description: "Runner to dispatch on. Use self-hosted to reach LAN Ollama."
+        required: false
+        default: "ubuntu-latest"
+        type: choice
+        options:
+          - "ubuntu-latest"
+          - "self-hosted"
   workflow_call:
     inputs:
       suite:
@@ -45,6 +53,11 @@ on:
         required: false
         default: ""
         type: string
+      runner:
+        description: "Runner label. 'ubuntu-latest' or 'self-hosted'."
+        required: false
+        default: "ubuntu-latest"
+        type: string
     outputs:
       result:
         description: "Test result"
@@ -53,7 +66,7 @@ on:
 jobs:
   test:
     name: Run ${{ inputs.suite }} Tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     outputs:
       result: ${{ steps.run-tests.outcome }}
 
