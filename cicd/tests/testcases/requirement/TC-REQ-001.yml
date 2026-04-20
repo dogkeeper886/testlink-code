@@ -1,0 +1,99 @@
+id: TC-REQ-001
+name: Requirement specification CRUD
+suite: requirement
+priority: 1
+timeout: 60000
+dependencies:
+  - TC-AUTH-001
+
+steps:
+  - name: Create parent project (setup)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>RS{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      projectId: "id"
+
+  - name: Create requirement specification under project
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createRequirementSpecification</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+        <member><name>requirementdocid</name><value><string>RS-{{testId}}-{{runId}}</string></value></member>
+        <member><name>title</name><value><string>spec-{{testId}}-{{runId}}</string></value></member>
+        <member><name>scope</name><value><string>Created by {{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+    capture:
+      specId: "id"
+
+  - name: List specs for the project; verify ours appears
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getRequirementSpecificationsForTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><int>{{projectId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "spec-{{testId}}-{{runId}}"
+
+  - name: Delete requirement specification (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteRequirementSpecification</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>reqspecid</name><value><int>{{specId}}</int></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete parent project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>RS{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+objective: |
+  Confirm the Requirement Specification entity supports full CRUD
+  via XML-RPC. A requirement spec is the container for requirements;
+  without working spec CRUD, no requirement traceability workflow
+  can be automated through the API.
+
+judgeContext: |
+  A requirement spec in TestLink is a node under a test project that
+  holds a collection of requirements. It has a doc_id (unique within
+  the project) and a title (human-readable name).
+
+  tl.createRequirementSpecification returns a struct with the new
+  spec id in the "id" field.
+  tl.getRequirementSpecificationsForTestProject returns a list of
+  spec structs, each carrying "id", "doc_id", and "title" fields.
+  tl.deleteRequirementSpecification returns boolean 1 on success.
+
+criteria: |
+  Pass: tl.createRequirementSpecification returns a new spec id;
+  tl.getRequirementSpecificationsForTestProject response contains
+  the literal title "spec-{{testId}}-{{runId}}";
+  tl.deleteRequirementSpecification returns boolean 1;
+  the parent project delete also returns boolean 1.
+
+  Fail: any step returns a fault envelope; the list does not contain
+  the just-created spec's title; delete fails to acknowledge.

@@ -14,6 +14,7 @@ export const SUITES = [
   'crud',
   'plan',
   'execution',
+  'requirement',
   'workflow',
   'negative',
   'regression',
