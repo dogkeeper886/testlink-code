@@ -38,34 +38,55 @@ When `judge_mode=dual` is dispatched against a GitHub-hosted runner, the LLM jud
 
 ### Prerequisites on the runner host
 
-- Docker installed and the user running the runner is in the `docker` group (`ci-up.sh` uses `docker compose` without `sudo`).
+- Docker installed and the user who will run the runner is in the `docker` group (`ci-up.sh` uses `docker compose` without `sudo`).
 - Network route to the Ollama instance (e.g. `192.168.2.103:11434`).
-- A user account dedicated to the runner.
+- A user account (can be the developer's own — no dedicated account required).
+- `sudo` access for the systemd install step.
+
+### Install location
+
+The runner lives under `/usr/local/actions-runner-testlink-code/` rather than the user's home directory. Systemd's default service context cannot reliably reach files under `$HOME`, so keeping the runner tree outside home avoids a whole class of permission puzzles. The directory is chown'd to the runner user so the service can start without sudo-shimming.
 
 ### Register
 
-1. Go to **Settings → Actions → Runners → New self-hosted runner** on the fork. GitHub generates a single-use registration token (expires in ~1 hour) and shows the download/config commands.
-2. On the runner host:
+1. Go to **Settings → Actions → Runners → New self-hosted runner** on the fork. GitHub generates a single-use registration token (expires in ~1 hour) and shows the current runner version + checksum.
+2. On the runner host, download the tarball to your home directory (not `/usr/local` — keep the one-shot download outside the persistent install path):
    ```
-   mkdir actions-runner && cd actions-runner
-   curl -o actions-runner-linux-x64-<version>.tar.gz -L https://github.com/actions/runner/releases/download/v<version>/actions-runner-linux-x64-<version>.tar.gz
-   tar xzf actions-runner-linux-x64-<version>.tar.gz
-   ./config.sh --url https://github.com/<owner>/testlink-code --token <token>
+   cd ~
+   curl -sSfL -o actions-runner-linux-x64-<version>.tar.gz \
+     https://github.com/actions/runner/releases/download/v<version>/actions-runner-linux-x64-<version>.tar.gz
+   sha256sum actions-runner-linux-x64-<version>.tar.gz   # compare against GitHub's page
    ```
-   Use GitHub's current "New self-hosted runner" page for the exact version number and checksum — this doc intentionally doesn't pin one.
-3. Accept the default `self-hosted` label. The workflows dispatch against the bare `self-hosted` label; no custom labels are needed for a single-runner setup.
+   This doc intentionally doesn't pin a version — check GitHub's "New self-hosted runner" page for the current one.
+3. Create the install path, chown to the user who will run the service, and extract:
+   ```
+   sudo mkdir -p /usr/local/actions-runner-testlink-code
+   sudo chown "$USER:$USER" /usr/local/actions-runner-testlink-code
+   tar xzf ~/actions-runner-linux-x64-<version>.tar.gz \
+     -C /usr/local/actions-runner-testlink-code
+   ```
+4. Register:
+   ```
+   cd /usr/local/actions-runner-testlink-code
+   ./config.sh --unattended \
+     --url https://github.com/<owner>/testlink-code \
+     --token <token>
+   ```
+   `--unattended` accepts defaults for runner group, runner name (the hostname), labels (`self-hosted,Linux,X64`), and work folder (`_work`). The workflows dispatch against the bare `self-hosted` label, which is one of the defaults — no custom labels needed for a single-runner setup.
 
 ### Install as a service (so it survives reboots)
 
-From inside the `actions-runner` directory:
+From `/usr/local/actions-runner-testlink-code/`:
 
 ```
-sudo ./svc.sh install
+sudo ./svc.sh install <user>      # e.g. sudo ./svc.sh install jack
 sudo ./svc.sh start
 sudo ./svc.sh status
 ```
 
-This installs a systemd unit that starts the runner on boot and respawns it if it dies. The alternative, `./run.sh` in the foreground, stops as soon as you close the shell — fine for a first test, not for durable CI.
+Pass the username explicitly — without it, `svc.sh` defaults via `$SUDO_USER`, which is right in interactive shells but not always in automation contexts. The install creates a systemd unit at `/etc/systemd/system/actions.runner.<owner>-<repo>.<hostname>.service`, enables it for boot, and starts it.
+
+Foreground mode (`./run.sh`) works for a first-test sanity check but dies with the shell — use the service install for durable CI.
 
 ### Set the LLM endpoint
 
