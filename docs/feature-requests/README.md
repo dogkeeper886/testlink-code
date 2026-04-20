@@ -46,3 +46,4 @@ If you happen to use Claude Code, there's an optional personal skill (`~/.claude
 | [FR-002](./FR-002-delete-build-and-remove-test-case-from-test-plan.md) | Add `deleteBuild` and `removeTestCaseFromTestPlan` | done | [#8](https://github.com/dogkeeper886/testlink-code/issues/8) |
 | [FR-003](./FR-003-requirement-spec-and-requirement-crud.md) | Add Requirement Spec + Requirement CRUD | draft | [#9](https://github.com/dogkeeper886/testlink-code/issues/9) |
 | [FR-004](./FR-004-llm-judge-evidence-grounding.md) | LLM judge — enforce grounded evidence citations | done | [#14](https://github.com/dogkeeper886/testlink-code/issues/14) |
+| [FR-005](./FR-005-github-actions-env-vars-and-secrets.md) | GitHub Actions runner env vars + secrets | draft | [#19](https://github.com/dogkeeper886/testlink-code/issues/19) |
