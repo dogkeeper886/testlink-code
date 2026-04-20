@@ -24,6 +24,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # reach the tsx CLI. Keep it optional — absent .env means rely on defaults.
 # Caller-wins: a variable already present in the inherited environment is
 # left alone, so `LLM_JUDGE_URL=... bash run-tests.sh ...` works as expected.
+# .env is read as literal `key=value` lines — no bash interpolation, no
+# quote-stripping — which differs from the previous `. "$ENV_FILE"` loader.
 ENV_FILE="$REPO_ROOT/cicd/tests/.env"
 if [ -f "$ENV_FILE" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
