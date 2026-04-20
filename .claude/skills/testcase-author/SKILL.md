@@ -1,80 +1,128 @@
 ---
 name: testcase-author
-description: Help an author or reviewer think through a CI testcase — what it's proving, what its evidence means, and how its criteria prove or disprove the claim. Use when the user asks to "write a test for X", "author TC-...", or "review this testcase". The skill guides the reasoning; it does not prescribe a template. Canonical guide is cicd/tests/TESTCASE_AUTHORING.md.
+description: Think through a CI testcase. In authoring mode, produces a new YAML under cicd/tests/testcases/<suite>/. In review mode, produces a short bulleted findings report (possibly empty). Invoke when the user asks to write a new test, author TC-..., or review an existing testcase for correctness and clarity. Canonical guide is cicd/tests/TESTCASE_AUTHORING.md — read it first.
 ---
 
-# Authoring or reviewing a testcase — guided thinking
+# Testcase authoring and review
 
-A testcase is a claim about the system and the evidence for that claim. The LLM judge reads three fields — `objective`, `judgeContext`, `criteria` — as a per-test prompt. This skill walks through the reasoning a good author or reviewer follows. It does not hand over a template; copy-pasted templates produce testcases that describe themselves instead of teaching the judge anything.
+A testcase is a claim about the system plus the evidence that proves the claim. Three YAML fields are the claim surface:
 
-Read [`cicd/tests/TESTCASE_AUTHORING.md`](../../../cicd/tests/TESTCASE_AUTHORING.md) first. It is the canonical source. For framework mechanics (lifecycle, dynamic IDs, teardown), see [`cicd/tests/TESTING_GUIDELINES.md`](../../../cicd/tests/TESTING_GUIDELINES.md).
+- `objective` — the claim, in terms a product stakeholder would recognize.
+- `judgeContext` — the domain knowledge a new colleague would need to interpret the evidence. Not a step narration; the YAML already has that.
+- `criteria` — the observable in the logs that proves or disproves the claim. Specific fragments, not vague success-words.
 
-## Two modes
+All three fields, plus the `expectPatterns` on each step, are read by both a regex-matching simple judge and an LLM semantic judge. They are the test-specific prompt to the judge.
 
-### Mode A — Authoring a new testcase
+This skill guides the reasoning; it does not hand over a template. Fill-in-the-blank tests end up describing themselves instead of teaching the judge anything.
 
-Don't start by writing YAML. Start by answering four questions.
+## Deliverables
 
-1. **What claim about the system is this test making?**
-   One sentence. Not "this test calls X and asserts Y" — that's the *how*. The claim is the *why*: "the admin API key accepts valid clients", "executions persist with the reported status", "the Docker image builds reproducibly from the current Dockerfile."
-   
-   If you can't state a single clean claim, the test is trying to prove too many things. Split it.
+- **Authoring mode** — a new YAML file at `cicd/tests/testcases/<suite>/TC-<SUITE>-NNN.yml`, plus a run of the suite to confirm both judges agree.
+- **Review mode** — a bulleted findings list. *It is valid for the list to be empty.* Do not invent findings to look thorough.
 
-2. **What's the minimum scenario that would prove this claim?**
-   Walk backwards from the claim to the shortest sequence of operations that exercises it. Don't pad the test with incidental verification — each extra assertion is something that can misfire.
+Each review finding: severity · one-line claim of what's weak · one-line why it matters. No more. No fix wording.
 
-3. **What will the evidence look like if the claim holds? If it doesn't?**
-   Be specific. Don't say "the response indicates success." Say: "stderr contains `<member><name>status</name><value><string>p</string></value></member>`; absence of that exact fragment, or presence of a `<fault>` envelope, is the disproof."
-   
-   If you can't describe the evidence shape confidently, you may not understand the API well enough yet. Go run the operations manually and inspect the real output before writing the test.
+---
 
-4. **What would a new colleague need to know to interpret this evidence correctly?**
-   This is what `judgeContext` is for. The judge is a colleague who starts from zero every invocation. Teach it — but teach only what's needed to read *these* logs, not the whole system.
+## Authoring mode — four questions before any YAML
 
-Once those are answered, the three fields write themselves:
-- **`objective`** ← answer to (1), plus why it matters.
-- **`judgeContext`** ← answer to (4).
-- **`criteria`** ← answer to (3), tightened to exact observable fragments.
+Don't open the editor until these are answered.
 
-Then draft the YAML (steps, capture chain, teardown) using the skeleton mechanics in `TESTING_GUIDELINES.md`. Run the suite and read the verdict — if the judge fails, read its reason and check: is the criterion actually met in the evidence? If yes, either the criteria language is imprecise or the judgeContext is missing domain knowledge. Fix at the source.
+1. **What claim about the system does this test make?**
+   One sentence, named in product terms. *"Admin API keys are accepted"*, not *"checkDevKey returns `<boolean>1</boolean>`"*. If you can't make one sentence, split the test.
 
-### Mode B — Reviewing a testcase
+2. **What's the smallest scenario that exercises the claim?**
+   Walk from the claim backward to the minimum sequence of operations. Each extra step is another thing that can mis-assert.
 
-Walk through these questions. Record each as a finding. Severity is based on what breaks when it's wrong.
+3. **What does the evidence look like, specifically, when the claim holds? When it doesn't?**
+   The exact XML fragment, at the exact field path, in the exact step's stderr. If you can't describe the success evidence and the failure evidence concretely, run the commands manually first.
 
-**Is the claim clear?**
-- Reading only `objective`, do you understand what regression this test protects against?
-- Is it one claim, or is the field secretly listing three?
+4. **What would a new colleague — who has never seen this API — need to interpret these logs correctly?**
+   That's the judgeContext. Teach only what's needed for *these* logs, not the whole system.
 
-**Is the evidence explained?**
-- Does `judgeContext` tell you what the logs *mean*, or does it retell the YAML's steps?
-- If a junior engineer read the logs and this field, could they interpret them correctly?
-- Is there speculation about failure modes the evidence couldn't actually reveal? (Those prime the judge to hallucinate.)
+The three fields then write themselves:
+- `objective` ← (1), plus one phrase on what regression it protects against.
+- `criteria` ← (3), tightened to exact observable fragments.
+- `judgeContext` ← (4).
 
-**Are the criteria precise?**
-- Could a human verify the criteria against a log file without consulting the author?
-- If any criterion has regex alternation (`A|B`), does each alternative *independently* prove the claim? Or is one alternative a field that's always present anyway?
-- Do the criteria name the exact fragment in the exact place, or vaguely say "success" / "passed" / "valid"?
+After the YAML is drafted, run `bash cicd/scripts/run-tests.sh --suite <suite>`. If both judges pass on first run, the authoring is likely sound. If the LLM judge flags the test for a reason the evidence doesn't actually show, the gap is in the judgeContext — add the *domain fact* the judge is missing, not a correction addressed to the judge.
 
-**Are the three fields doing different work?**
-- Is `judgeContext` adding something the `objective` and the steps themselves don't already say?
-- Are `criteria` specific to observable evidence, or do they repeat the `objective` in different words?
-- All three together should be shorter than the steps block, not longer.
+## Review mode
 
-**Mechanics (from `TESTING_GUIDELINES.md`, briefly):**
-- All IDs come from `capture:`, no hardcoded numeric literals in XML-RPC params.
+**Before reading the three fields, do the warm-up.** Read the steps and the captured evidence. Without consulting the objective / criteria, ask yourself: *does the claim this test appears to be making actually hold given these logs?*
+
+- If you can't tell — the test is unclear or under-evidenced. That's a finding.
+- If you can tell *yes*, but the simple judge's `expectPatterns` would also pass on a state where the answer would be *no* — that's a false-positive finding, and it's usually **must-fix**.
+
+Only after the warm-up, walk the fields with these questions.
+
+### Is the claim clear?
+- From `objective` alone, do you know what regression this test protects against?
+- Is it one claim, or several stapled together?
+
+### Is the evidence explained?
+- Does `judgeContext` add something the steps don't already show? Or does it retell what the YAML already says?
+- Could a new colleague read the logs + judgeContext and interpret them without asking the author?
+
+### Are the criteria precise?
+- If any criterion has regex alternation (`A|B`), does each alternative independently prove the claim? Or is one alternative a field that's present in *both* correct and regressed states?
+- Do the criteria name the exact fragment at the exact field path, or use vocabulary like *success*, *passed*, *valid*?
+
+### Are the three fields doing different work?
+- `objective` states the claim. `criteria` name the observable. `judgeContext` adds interpretive context.
+- Do they overlap or restate each other? Each should be doing its own job.
+- Together they should be shorter than the steps block, not longer.
+
+### The domain-vs-directive test
+
+Some `judgeContext` content is legitimately directive toward the judge; some is a workaround for the judge's weaknesses. Use this distinguisher:
+
+> **Would another human engineer, reading these logs for the first time, independently say this?**
+
+- Yes → domain knowledge. Keep it. Example: *"TestLink's execution model is latest-wins."*
+- No → model-steering. Example: *"IMPORTANT FOR THE JUDGE: don't conclude fail just because..."*. No human says this to another human about logs.
+
+Model-steering belongs in the framework's system prompt (`llm-judge.ts`), not repeated per-test. When you find it in a `judgeContext`, the finding is: *generic steering masquerading as per-test context.* The information may be correct; the framing is at the wrong layer.
+
+### Mechanics (from `TESTING_GUIDELINES.md`, for completeness)
+- IDs come from `capture:`, no numeric literals in XML-RPC params.
 - `{{devKey}}` everywhere, no API key literals.
 - Teardown in reverse creation order.
-- Entity names carry `{{runId}}` or `{{testId}}`.
+- Entity names carry `{{runId}}` / `{{testId}}`.
 - All XML-RPC through `cicd/scripts/xmlrpc-capture.sh`.
 
-## What NOT to do in either mode
+---
 
-- **Don't prescribe a formula to the author.** If you find yourself saying "add `IMPORTANT FOR THE JUDGE:` to your context" or any other magic phrase, stop. Ask instead: *what does the author know about this test that the judge doesn't?* The author's answer IS the `judgeContext`. Formulas produce noise; domain knowledge produces signal.
-- **Don't grade the test against an LLM model's known quirks.** If a particular model hallucinates on long tests, that's a framework concern. The test author's job is to communicate the claim and evidence well; a well-written test will survive most models.
-- **Don't let a loose `expectPattern` slide** because the test currently passes. Loose patterns are silent future regressions. Tight is always better.
+## Anti-patterns
 
-## Output
+1. **Don't prescribe specific phrases.** A finding says what's missing or vague; it does not dictate wording. Give the author the principle; let them pick words.
+2. **Don't forgive a loose pattern because the test currently passes.** If the simple judge would pass on a regressed state, the test is silently broken — surface it regardless of run history.
+3. **Don't manufacture findings.** A well-written test gets no findings. Saying so is the correct output.
+4. **Don't grade with model names.** Never frame a finding as "gemma3 will confuse this" or "qwen handles this better." The question is whether the test is a clear prompt, not whether a specific model handles it. Model-specific weaknesses are framework-level concerns.
 
-- **Mode A:** produce the YAML, run the suite once, report the verdict. If both judges pass on the first run, the authoring was probably good. If the LLM judge fails with a reason that cites something absent from the evidence, the `judgeContext` may need a concrete statement about what's *not* an error (e.g. "intermediate status values are expected — the final state is the verdict"). Fix specifically, don't generalize.
-- **Mode B:** a bulleted finding report. One line per finding: what's weak, why it matters, what would fix it. Don't rewrite the YAML — the author decides scope.
+---
+
+## Severity rubric
+
+- **Must fix** — the claim is wrong, or the criteria would pass on a regressed system. The test is broken or silently deceptive.
+- **Should fix** — the three fields are not cleanly doing their three jobs; a reader would be confused; framing is off but facts are right.
+- **Nice to tighten** — works today, but a foreseeable regression or API shape change would turn it into a must-fix. Usually loose patterns.
+
+## Output shapes
+
+**Authoring:**
+```
+Wrote: cicd/tests/testcases/<suite>/TC-<SUITE>-NNN.yml
+Ran:   bash cicd/scripts/run-tests.sh --suite <suite>
+Result: simple X/Y, LLM X/Y
+Follow-up (only if needed): <one-line note on any iteration>
+```
+
+**Reviewing:**
+```
+TC-<SUITE>-NNN
+  [severity] <one-line finding> — <one-line why>
+
+TC-<SUITE>-NNN
+  No findings.
+```
