@@ -14,23 +14,17 @@ Switch `judge_mode` to `dual` at dispatch time if you want the LLM judge to run 
 
 ## Secrets and variables
 
-Add these in your fork's **Settings → Secrets and variables → Actions**. All are optional — the framework falls back to defaults when they are unset.
+Add this in your fork's **Settings → Secrets and variables → Actions**. It's optional — the framework falls back to a default when unset.
 
 | Name | Kind | Purpose | Default if unset |
 |---|---|---|---|
-| `LLM_JUDGE_URL` | Secret | Ollama endpoint for the LLM judge | `http://localhost:11434` (unreachable on hosted runners) |
-| `LLM_JUDGE_MODEL` | Variable | Model tag the judge asks Ollama to load | `gemma3:4b` |
 | `TL_DEV_KEY` | Secret | Rotated admin API key (32 hex chars) | `a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4` (seeded by `init-db.sh`) |
 
-Leave them unset for simple-judge-only CI. Set `LLM_JUDGE_URL` + `LLM_JUDGE_MODEL` when you want `dual` mode to work against a real endpoint.
-
-## Why these aren't in a `.env` file on the runner
-
-Local developers put these in `cicd/tests/.env` (gitignored). The workflow does **not** materialize that file on the runner — values flow through the job's `env:` block straight into the test framework's process environment. See FR-005's *Alternatives considered* for the reasoning.
+The LLM judge's endpoint and model are **not** configured via GH secrets/variables. They live in the self-hosted runner's root `.env` (see *Set the LLM endpoint* below) so that the same value the runner reaches at LAN routing time is the one the judge uses, with no GH-side editing required.
 
 ## Local dev is unchanged
 
-Your `cicd/tests/.env` keeps working exactly as before. `run-tests.sh` sources it only when present, and the runner has no `.env` to source.
+Your `cicd/tests/.env` keeps working exactly as before. `run-tests.sh` sources it only when present, and a hosted GitHub runner has no `.env` to source.
 
 ## Self-hosted runner (for `dual` judge mode with a LAN Ollama)
 
@@ -90,12 +84,22 @@ Foreground mode (`./run.sh`) works for a first-test sanity check but dies with t
 
 ### Set the LLM endpoint
 
-In **Settings → Secrets and variables → Actions**:
+The GitHub Actions runner reads `/usr/local/actions-runner-testlink-code/.env` at startup and bakes those vars into every job's process environment. Append the LLM config there:
 
-- `secrets.LLM_JUDGE_URL` = `http://<ollama-host-on-lan>:11434`
-- `vars.LLM_JUDGE_MODEL` = `gemma3:4b` (or whichever model you've pulled on that Ollama)
+```
+LLM_JUDGE_URL=http://<ollama-host-on-lan>:11434
+LLM_JUDGE_MODEL=gemma3:4b
+```
 
-These flow into the job environment when the workflow dispatches — see the "Secrets and variables" table above.
+(Use whichever model you've pulled on that Ollama.)
+
+Restart the service after editing so the new vars are picked up:
+
+```
+sudo systemctl restart actions.runner.<owner>-<repo>.<hostname>.service
+```
+
+The workflow does not flow `LLM_JUDGE_URL` / `LLM_JUDGE_MODEL` through `secrets`/`vars` — they reach the test framework directly from the runner's process env. This keeps the URL co-located with the host that has to route to it; nothing in the GH UI needs editing when your Ollama box's IP changes.
 
 ### Dispatch
 

@@ -25,7 +25,7 @@ on:
           - "simple"
           - "dual"
       judge_model:
-        description: "LLM model (leave blank to use vars.LLM_JUDGE_MODEL or framework default gemma3:4b)"
+        description: "LLM model (leave blank to use the self-hosted runner's LLM_JUDGE_MODEL or framework default gemma3:4b)"
         required: false
         default: ""
         type: string
@@ -49,7 +49,7 @@ on:
         default: "simple"
         type: string
       judge_model:
-        description: "LLM model override; empty means use vars.LLM_JUDGE_MODEL / framework default"
+        description: "LLM model override; empty means use the runner's LLM_JUDGE_MODEL / framework default"
         required: false
         default: ""
         type: string
@@ -85,19 +85,18 @@ jobs:
       - name: Run tests
         id: run-tests
         env:
-          # Flow secrets/vars through to the test framework. When unset,
-          # the scripts' defaults kick in (see cicd/tests/src/config.ts and
-          # cicd/scripts/init-db.sh). Local dev keeps using cicd/tests/.env
-          # — workflows never materialize that file. See FR-005.
-          LLM_JUDGE_URL: ${{ secrets.LLM_JUDGE_URL }}
-          LLM_JUDGE_MODEL: ${{ vars.LLM_JUDGE_MODEL }}
+          # TL_DEV_KEY is the only LLM/credential value still flowed via GH
+          # secrets — the runner's process env supplies LLM_JUDGE_URL and
+          # LLM_JUDGE_MODEL on self-hosted (see CI_SETUP.md "Set the LLM
+          # endpoint"), and hosted runners don't run dual mode. When unset,
+          # the scripts' defaults kick in (see cicd/scripts/init-db.sh).
           TL_DEV_KEY: ${{ secrets.TL_DEV_KEY }}
         run: |
           # Build judge flags based on input.
           # In dual mode, only append --judge-model when the operator typed
-          # one at dispatch time. Otherwise let LLM_JUDGE_MODEL (from the
-          # env: block above, fed by vars.LLM_JUDGE_MODEL) or the framework
-          # default in config.ts take effect — a CLI flag would shadow them.
+          # one at dispatch time. Otherwise let LLM_JUDGE_MODEL (provided by
+          # the self-hosted runner's root .env) or the framework default in
+          # config.ts take effect — a CLI flag would shadow them.
           JUDGE_FLAGS=""
           if [ "${{ inputs.judge_mode }}" = "simple" ] || [ -z "${{ inputs.judge_mode }}" ]; then
             JUDGE_FLAGS="--no-llm"
