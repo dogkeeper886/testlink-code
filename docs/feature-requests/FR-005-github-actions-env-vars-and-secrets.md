@@ -24,7 +24,7 @@ The CI test framework reads configuration from several environment variables:
 | Var | Default (when unset) | Who uses it |
 |---|---|---|
 | `LLM_JUDGE_URL` | `http://localhost:11434` | `cicd/tests/src/config.ts` — Ollama endpoint for semantic judge |
-| `LLM_JUDGE_MODEL` | `llama3:8b` | Model to load on that endpoint |
+| `LLM_JUDGE_MODEL` | `gemma3:4b` | Model to load on that endpoint |
 | `TL_PORT` | `8091` | `docker-compose.ci.yml` host port |
 | `TL_URL` | `http://localhost:8091` | `ci-up.sh` health check, `xmlrpc-capture.sh` default |
 | `TL_DEV_KEY` | `a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4` | `executor.ts` → `{{devKey}}`, `init-db.sh` → seeded admin key |

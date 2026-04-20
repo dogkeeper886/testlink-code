@@ -19,7 +19,7 @@ Add these in your fork's **Settings → Secrets and variables → Actions**. All
 | Name | Kind | Purpose | Default if unset |
 |---|---|---|---|
 | `LLM_JUDGE_URL` | Secret | Ollama endpoint for the LLM judge | `http://localhost:11434` (unreachable on hosted runners) |
-| `LLM_JUDGE_MODEL` | Variable | Model tag the judge asks Ollama to load | `llama3:8b` |
+| `LLM_JUDGE_MODEL` | Variable | Model tag the judge asks Ollama to load | `gemma3:4b` |
 | `TL_DEV_KEY` | Secret | Rotated admin API key (32 hex chars) | `a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4` (seeded by `init-db.sh`) |
 
 Leave them unset for simple-judge-only CI. Set `LLM_JUDGE_URL` + `LLM_JUDGE_MODEL` when you want `dual` mode to work against a real endpoint.
