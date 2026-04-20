@@ -45,3 +45,4 @@ If you happen to use Claude Code, there's an optional personal skill (`~/.claude
 | [FR-001](./FR-001-extend-functional-test-coverage.md) | Extend functional test coverage | draft | [#7](https://github.com/dogkeeper886/testlink-code/issues/7) |
 | [FR-002](./FR-002-delete-build-and-remove-test-case-from-test-plan.md) | Add `deleteBuild` and `removeTestCaseFromTestPlan` | draft | [#8](https://github.com/dogkeeper886/testlink-code/issues/8) |
 | [FR-003](./FR-003-requirement-spec-and-requirement-crud.md) | Add Requirement Spec + Requirement CRUD | draft | [#9](https://github.com/dogkeeper886/testlink-code/issues/9) |
+| [FR-004](./FR-004-llm-judge-evidence-grounding.md) | LLM judge — enforce grounded evidence citations | draft | [#14](https://github.com/dogkeeper886/testlink-code/issues/14) |
