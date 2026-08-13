@@ -32,6 +32,28 @@ jobs:
       contents: read
 
     steps:
+      # First, and before the checkout: this job depends on the runner already
+      # holding a Docker Hub login, which is ambient machine state no one can
+      # read from here. Establishing that costs a second; discovering it after
+      # a --no-cache --pull build of a php:7.4-apache image does not. The
+      # identity of the runner is printed either way, because "which machine is
+      # this?" is the question that sends people looking in the wrong place.
+      - name: Preflight — runner identity and Docker Hub login
+        run: |
+          set -uo pipefail
+          echo "runner host : $(hostname)"
+          echo "runner user : $(whoami)"
+          echo "runner name : ${RUNNER_NAME:-unknown}"
+          USER_ENTRY=$(docker info 2>/dev/null | sed -n 's/^ *Username: *//p')
+          if [ -z "${USER_ENTRY}" ]; then
+            echo "::error::No Docker Hub login found for user $(whoami) on $(hostname). \
+          Docker credentials are per-user, so a login performed as another account does not \
+          apply here. Either run 'docker login' as this user on this machine, or switch the \
+          workflow to DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets."
+            exit 1
+          fi
+          echo "docker hub  : logged in as ${USER_ENTRY}"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
