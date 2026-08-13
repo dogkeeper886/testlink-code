@@ -18,7 +18,14 @@ This repository is a fork of TestLink (PHP test management system). This file te
 
 ## Main branch
 
-`testlink_1_9_20_fixed`. Inherited from upstream; not renamed to `main` because the fork still pulls from `TestLinkOpenSourceTRMS/testlink-code`.
+`main`.
+
+This repository shares **no git history** with `TestLinkOpenSourceTRMS/testlink-code`. Its root commit is a squashed whole-tree import, so there is no merge base and upstream cannot be merged or rebased in without `--allow-unrelated-histories`. Treat this as its own project that carries TestLink's code, not as a live fork tracking upstream.
+
+Two consequences worth knowing before you reach for git:
+
+- Upstream tags are fetched into their own namespace, so `upstream/1.9.20` is upstream's and any bare tag is this project's. The refspec is pinned in `.git/config`; don't fetch upstream tags unnamespaced.
+- `gh` will target the upstream repository unless the default is set (`gh repo set-default dogkeeper886/testlink-code`). Check before opening a PR.
 
 ## GitHub workflows
 
