@@ -2,7 +2,7 @@
 
 When you write a testcase, you're writing for two judges with different jobs. Getting the division of labor wrong is the most common mistake; understanding it is the first thing.
 
-This guide is about the thinking, not a template. For mechanics (framework lifecycle, dynamic IDs, teardown), see [`TESTING_GUIDELINES.md`](./TESTING_GUIDELINES.md).
+This guide is about the thinking, not a template. For mechanics (framework lifecycle, dynamic IDs, teardown), see [`TESTING_GUIDELINES.md`](../TESTING_GUIDELINES.md).
 
 ---
 
