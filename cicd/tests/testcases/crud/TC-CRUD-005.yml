@@ -1,0 +1,116 @@
+id: TC-CRUD-005
+name: Test project update refuses changes it cannot safely make
+suite: crud
+priority: 5
+timeout: 60000
+dependencies:
+  - TC-AUTH-001
+
+steps:
+  - name: Create test project
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>guard-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>G{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+
+  - name: Ask to change the prefix, alongside a notes change that is allowed
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.updateTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>G{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>CHANGED{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>must-not-persist</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>code</name><value><int>50</int>"
+
+  - name: Ask for an unknown option, alongside a known option that is allowed
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.updateTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>G{{runId}}</string></value></member>
+        <member><name>options</name><value><struct>
+          <member><name>inventoryEnabled</name><value><int>0</int></value></member>
+          <member><name>bogusFlag</name><value><int>1</int></value></member>
+        </struct></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>code</name><value><int>-1</int>"
+      - "Unknown options key"
+
+  - name: Confirm neither refused request left anything behind
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getTestProjectByName</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>guard-{{testId}}-{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>prefix</name><value><string>G{{runId}}</string>"
+      - "<name>notes</name><value><string>{{testId}}</string>"
+      - "<name>inventoryEnabled</name><value><int>1</int>"
+
+  - name: Delete project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>G{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+objective: |
+  Verify that tl.updateTestProject turns away a request it cannot safely
+  satisfy, rather than carrying out the parts it likes and reporting success.
+  The two refusals guarded here protect different things: the test case prefix
+  is stamped into the external ID of every test case beneath the project, and
+  unrecognised option keys are refused because they would otherwise be written
+  into a serialized blob that reaches the database query unescaped.
+
+judgeContext: |
+  Both update attempts deliberately pair something forbidden with something
+  the API would normally accept — a prefix change alongside a notes change, an
+  unknown option alongside a real one. That pairing is the point. If the method
+  were dropping the forbidden part and proceeding with the rest, the response
+  would still look like an error while the permitted change quietly landed, so
+  only the read-back distinguishes a genuine refusal from a partial one.
+
+  Two error codes appear. Code 50 is TestLink's not-implemented code, used here
+  for the prefix refusal because no existing code means "this field cannot be
+  changed"; the message carries the real meaning. Code -1 is the general error
+  code, used for an options struct naming a key outside the four the API
+  recognises.
+
+  A project created through this API starts with all four option flags enabled,
+  which is why inventoryEnabled reading back as 1 shows the second attempt
+  changed nothing — the request asked for 0.
+
+  Each helper invocation puts the raw XML response in stderr (where
+  expectPatterns matches) and a JSON envelope in stdout. TestLink reports these
+  errors inside an ordinary params envelope carrying a code member rather than
+  as an XML-RPC fault, so their stdout still reads {"ok": true}.
+
+criteria: |
+  Pass: the prefix attempt comes back refused with code 50; the unknown-option
+  attempt comes back refused with code -1 and a message naming the accepted
+  keys; the project then still reads back with prefix G<runId>, its original
+  notes (<testId>), and inventoryEnabled at 1; and the delete succeeds.
+
+  Fail: either attempt is acknowledged as a success; or the read-back shows
+  notes reading 'must-not-persist', a prefix other than G<runId>, or
+  inventoryEnabled at 0 — each of which would mean a refused request still
+  wrote part of what it was asked to write.
