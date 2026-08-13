@@ -11,7 +11,7 @@ This repository is a fork of TestLink (PHP test management system). This file te
   - `cicd/scripts/run-tests.sh` — session wrapper. Sources `cicd/tests/.env`, guarantees teardown via `trap EXIT`, skips the lifecycle for the `build` suite.
   - `cicd/scripts/xmlrpc-capture.sh` — the only thing YAML test steps should use to call the XML-RPC API. Never shell out to `curl` directly.
   - `cicd/tests/testcases/<suite>/TC-<SUITE>-NNN.yml` — test definitions.
-  - `cicd/tests/TESTING_GUIDELINES.md` — framework mechanics (lifecycle, dynamic IDs, teardown).
+  - `cicd/TESTING_GUIDELINES.md` — framework mechanics (lifecycle, dynamic IDs, teardown).
   - `cicd/tests/TESTCASE_AUTHORING.md` — how to think about `objective`, `judgeContext`, and `criteria` for the LLM judge.
 - **`docs/feature-requests/`** — paired design records. Each non-trivial change gets an FR doc linked to its GitHub issue before code is written.
 - **`.claude/skills/`** — project-scoped Claude Code skills (see "Skills" below).
