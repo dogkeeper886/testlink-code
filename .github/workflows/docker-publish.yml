@@ -57,6 +57,16 @@ jobs:
           fi
           echo "${VERSION} verified at ${HEAD_SHA}"
 
+          # The git tag, this image's tag, and TL_VERSION_NUMBER are one string.
+          # A release that reports a version it is not cannot be un-published, so
+          # the mismatch has to stop the build rather than be noticed later.
+          if ! grep -q "define('TL_VERSION_NUMBER', '${VERSION}')" cfg/const.inc.php; then
+            echo "::error::TL_VERSION_NUMBER in cfg/const.inc.php does not match ${VERSION}."
+            grep -n "TL_VERSION_NUMBER" cfg/const.inc.php
+            exit 1
+          fi
+          echo "TL_VERSION_NUMBER matches ${VERSION}"
+
       - name: Build and push
         env:
           IMAGE: dogkeeper886/testlink-code
@@ -68,6 +78,7 @@ jobs:
           docker build --no-cache --pull \
             --label org.opencontainers.image.revision=${{ github.sha }} \
             --label org.opencontainers.image.version="${VERSION}" \
+            --label org.opencontainers.image.base.name=testlink:1.9.20 \
             -t "${IMAGE}:${VERSION}" \
             -t "${IMAGE}:latest" \
             .
