@@ -146,6 +146,7 @@ class TestlinkXMLRPCServer extends IXR_Server {
     public static $buildNameParamName = "buildname";
     public static $buildNotesParamName = "buildnotes";
     public static $checkDuplicatedNameParamName = "checkduplicatedname";
+    public static $colorParamName = "color";
     public static $contentParamName = "content";
     public static $customFieldNameParamName = "customfieldname";
     public static $customFieldsParamName = "customfields";
@@ -2261,6 +2262,258 @@ class TestlinkXMLRPCServer extends IXR_Server {
         }
 
         return $status_ok;
+    }
+
+    /**
+     * Test project option keys tl.updateTestProject will act on.
+     *
+     * Deliberately a whitelist: tlTestProject::update() interpolates
+     * serialize($options) straight into its SQL statement, so a key chosen by
+     * the caller would reach the query unescaped.
+     */
+    protected static $updatableTestProjectOptions = array(
+            'requirementsEnabled',
+            'testPriorityEnabled',
+            'automationEnabled',
+            'inventoryEnabled'
+    );
+
+    /**
+     * updateTestProject
+     *
+     * Update an existing test project.
+     *
+     * The update is partial: only the fields present in the request are
+     * changed, everything else keeps the value it already has. The test case
+     * prefix is deliberately not updatable — it is stamped into the external
+     * ID of every test case under the project — and supplying it is an error
+     * rather than a silent no-op.
+     *
+     * @param struct $args
+     * @param string $args["devKey"]
+     * @param int $args["testprojectid"] - optional if prefix is present
+     * @param string $args["prefix"] - optional if testprojectid is present
+     * @param string $args["testprojectname"] - optional, new name
+     * @param string $args["notes"] - optional
+     * @param int $args["active"] - optional
+     * @param int $args["public"] - optional
+     * @param string $args["color"] - optional
+     * @param struct $args["options"] - optional, any of requirementsEnabled,
+     *            testPriorityEnabled, automationEnabled, inventoryEnabled
+     *
+     * @return mixed $resultInfo
+     *         [operation] => updateTestProject
+     *         [status] => true on success
+     *         [id] => test project id
+     *         [message] => success message
+     * @access public
+     */
+    public function updateTestProject($args) {
+        $operation = __FUNCTION__;
+        $msg_prefix = "({$operation}) - ";
+
+        $this->_setArgs( $args );
+
+        // Everywhere else in this API testprojectname identifies a project, so
+        // _setArgs() resolves it to an internal id. Here the name is the value
+        // being written, not the identity, and that inference would silently
+        // retarget the update at whichever project already holds the new name.
+        // Identity is therefore re-established from what the caller sent.
+        unset( $this->args[self::$testProjectIDParamName] );
+        if(isset( $args[self::$testProjectIDParamName] )) {
+            $this->args[self::$testProjectIDParamName] = $args[self::$testProjectIDParamName];
+        }
+
+        // checkTestProjectIdentity() accepts either the internal id or the
+        // prefix, and sets the internal id on args when given the prefix.
+        $status_ok = $this->_runChecks( array(
+                'authenticate',
+                'checkTestProjectIdentity'
+        ), $msg_prefix );
+
+        if($status_ok) {
+            $status_ok = $this->userHasRight( "mgt_modify_product" );
+        }
+
+        $tprojectID = $status_ok ? intval( $this->args[self::$testProjectIDParamName] ) : 0;
+        $current = $status_ok ? $this->tprojectMgr->get_by_id( $tprojectID ) : null;
+
+        if($status_ok) {
+            $status_ok = $this->_checkUpdateTestProjectRequest( $msg_prefix, $tprojectID );
+        }
+
+        if(! $status_ok) {
+            return $this->errors;
+        }
+
+        // Every field the caller left out keeps its current value.
+        $name = $this->_isParamPresent( self::$testProjectNameParamName )
+                ? htmlspecialchars( $this->args[self::$testProjectNameParamName] )
+                : $current['name'];
+
+        $notes = $this->_isParamPresent( self::$noteParamName )
+                ? htmlspecialchars( trim( $this->args[self::$noteParamName] ) )
+                : $current['notes'];
+
+        $color = $this->_isParamPresent( self::$colorParamName )
+                ? htmlspecialchars( trim( $this->args[self::$colorParamName] ) )
+                : $current['color'];
+
+        $active = $this->_isParamPresent( self::$activeParamName )
+                ?($this->args[self::$activeParamName] > 0 ? 1 : 0)
+                : $current['active'];
+
+        $isPublic = $this->_isParamPresent( self::$publicParamName )
+                ?($this->args[self::$publicParamName] > 0 ? 1 : 0)
+                : $current['is_public'];
+
+        $options = $this->_buildUpdatedTestProjectOptions( $current );
+
+        // The prefix is never changed here, but it still has to be passed:
+        // tlTestProject::update() assigns its internal $tcprefix only inside
+        // the branch this argument guards, yet reads it unconditionally when
+        // building the update event context. Handing it the current value
+        // keeps that variable defined and writes the prefix back untouched.
+        //
+        // A failed write comes back as 0, so the result has to be inspected —
+        // reporting success for a statement the database rejected would be
+        // worse than the error itself.
+        $written = $this->tprojectMgr->update( $tprojectID, $name, $color, $notes,
+                $options, $active, $current['prefix'], $isPublic );
+
+        if(! $written) {
+            $msg = $msg_prefix . sprintf( 'Update of test project %s failed', $tprojectID );
+            $this->errors[] = new IXR_Error( GENERAL_ERROR_CODE, $msg );
+            return $this->errors;
+        }
+
+        $ret = array();
+        $ret[] = array(
+                "operation" => $operation,
+                "additionalInfo" => null,
+                "status" => true,
+                "id" => $tprojectID,
+                "message" => GENERAL_SUCCESS_STR
+        );
+        return $ret;
+    }
+
+    /**
+     * _checkUpdateTestProjectRequest
+     *
+     * @param string $msg_prefix
+     * @param int $tprojectID test project being updated
+     * @return boolean
+     * @access protected
+     */
+    protected function _checkUpdateTestProjectRequest($msg_prefix, $tprojectID) {
+        // A test case prefix change would restate the external ID of every
+        // test case already written under this project, so it is refused.
+        if($this->_isParamPresent( self::$testCasePrefixParamName )) {
+            $msg = $msg_prefix . sprintf( 'Changing %s is not supported',
+                    self::$testCasePrefixParamName );
+            $this->errors[] = new IXR_Error( NOT_YET_IMPLEMENTED, $msg );
+            return false;
+        }
+
+        // Options are answered for rather than quietly filtered: a caller who
+        // misspells a flag would otherwise be told the update succeeded while
+        // the flag they meant to set kept its old value.
+        if($this->_isParamPresent( self::$optionsParamName )) {
+            $supplied = $this->args[self::$optionsParamName];
+            if(! is_array( $supplied )) {
+                $msg = $msg_prefix . sprintf( '%s must be a struct', self::$optionsParamName );
+                $this->errors[] = new IXR_Error( GENERAL_ERROR_CODE, $msg );
+                return false;
+            }
+
+            $unknown = array_diff( array_keys( $supplied ), self::$updatableTestProjectOptions );
+            if(! empty( $unknown )) {
+                $msg = $msg_prefix . sprintf( 'Unknown %s key(s) %s, accepted keys are %s',
+                        self::$optionsParamName, implode( ', ', $unknown ),
+                        implode( ', ', self::$updatableTestProjectOptions ) );
+                $this->errors[] = new IXR_Error( GENERAL_ERROR_CODE, $msg );
+                return false;
+            }
+        }
+
+        // A request that names no field to change is a caller error, not an
+        // expensive no-op worth reporting as success.
+        $updatable = array(
+                self::$testProjectNameParamName,
+                self::$noteParamName,
+                self::$colorParamName,
+                self::$activeParamName,
+                self::$publicParamName,
+                self::$optionsParamName
+        );
+
+        $somethingToDo = false;
+        foreach( $updatable as $key ) {
+            if($this->_isParamPresent( $key )) {
+                $somethingToDo = true;
+                break;
+            }
+        }
+
+        if(! $somethingToDo) {
+            $msg = $msg_prefix . sprintf( MISSING_REQUIRED_PARAMETER_STR,
+                    implode( ' | ', $updatable ) );
+            $this->errors[] = new IXR_Error( MISSING_REQUIRED_PARAMETER, $msg );
+            return false;
+        }
+
+        if(! $this->_isParamPresent( self::$testProjectNameParamName )) {
+            return true;
+        }
+
+        // Renaming has to respect the same constraints creation does.
+        $name = $this->args[self::$testProjectNameParamName];
+
+        $check_op = $this->tprojectMgr->checkNameSintax( $name );
+        if(! $check_op['status_ok']) {
+            $this->errors[] = new IXR_Error( TESTPROJECTNAME_SINTAX_ERROR, $msg_prefix . $check_op['msg'] );
+            return false;
+        }
+
+        // Excluding this project's own id lets a caller re-send the name it
+        // already has without tripping the uniqueness check.
+        $check_op = $this->tprojectMgr->checkNameExistence( $name, $tprojectID );
+        if(! $check_op['status_ok']) {
+            $this->errors[] = new IXR_Error( TESTPROJECTNAME_EXISTS, $msg_prefix . $check_op['msg'] );
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * _buildUpdatedTestProjectOptions
+     *
+     * Start from the options the project already carries and overlay only the
+     * keys the caller supplied, so an update that never mentions options
+     * leaves them intact. _checkUpdateTestProjectRequest() has already
+     * rejected anything outside $updatableTestProjectOptions.
+     *
+     * @param array $current test project record being updated
+     * @return stdClass
+     * @access protected
+     */
+    protected function _buildUpdatedTestProjectOptions($current) {
+        $options = is_object( $current['opt'] ) ? clone $current['opt'] : new stdClass();
+
+        if(! $this->_isParamPresent( self::$optionsParamName )) {
+            return $options;
+        }
+
+        $supplied = $this->args[self::$optionsParamName];
+        foreach( self::$updatableTestProjectOptions as $key ) {
+            if(array_key_exists( $key, $supplied )) {
+                $options->$key = $supplied[$key] > 0 ? 1 : 0;
+            }
+        }
+
+        return $options;
     }
 
     /**
@@ -9815,6 +10068,7 @@ class TestlinkXMLRPCServer extends IXR_Server {
                 'tl.updateTestSuiteCustomFieldDesignValue' => 'this:updateTestSuiteCustomFieldDesignValue',
                 'tl.updateBuildCustomFieldsValues' => 'this:updateBuildCustomFieldsValues',
                 'tl.getTestSuite' => 'this:getTestSuite',
+                'tl.updateTestProject' => 'this:updateTestProject',
                 'tl.updateTestSuite' => 'this:updateTestSuite',
                 'tl.getRequirements' => 'this:getRequirements',
                 'tl.getRequirement' =>  'this:getRequirement',

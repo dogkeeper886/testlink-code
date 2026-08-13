@@ -31,9 +31,35 @@ steps:
       </struct></value></param></params></methodCall>
       XMLDOC
     expectPatterns:
-      - "proj-{{testId}}-{{runId}}"
+      - "<name>name</name><value><string>proj-{{testId}}-{{runId}}</string>"
 
-  - name: Delete project (teardown)
+  - name: Rename project, supplying no other field
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.updateTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectid</name><value><string>{{projectId}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}-renamed</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>operation</name><value><string>updateTestProject</string>"
+      - "<name>status</name><value><boolean>1</boolean>"
+
+  - name: Read back under new name, checking untouched fields survived
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getTestProjectByName</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>proj-{{testId}}-{{runId}}-renamed</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>name</name><value><string>proj-{{testId}}-{{runId}}-renamed</string>"
+      - "<name>notes</name><value><string>{{testId}}</string>"
+      - "<name>prefix</name><value><string>P{{runId}}</string>"
+
+  - name: Delete project by original prefix (teardown)
     command: |
       bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
       <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
@@ -45,43 +71,47 @@ steps:
       - "<boolean>1</boolean>|status.*true"
 
 objective: |
-  Confirm the Test Project entity supports the full create-read-delete
-  lifecycle via XML-RPC. Project is the root entity in the TestLink
-  hierarchy, so this CRUD must work before suites or cases can be tested.
+  Confirm the Test Project entity supports the full create-read-update-delete
+  lifecycle via XML-RPC, and that an update touches only the fields the caller
+  named. Project is the root entity in the TestLink hierarchy, so this CRUD
+  must work before suites or cases can be tested. Without a working update,
+  correcting a project's name means deleting and recreating it, which destroys
+  every test case beneath it.
 
 judgeContext: |
-  Three steps, each via xmlrpc-capture.sh:
-  1. Create — calls tl.createTestProject with a unique name derived from
-     {{testId}}-{{runId}}. Successful response contains <name>id</name>
-     followed by the new project ID; the helper captures it as projectId.
-  2. Read  — calls tl.getTestProjectByName with the same unique name.
-     Successful response contains the project name string verbatim,
-     proving the entity round-trips.
-  3. Delete — calls tl.deleteTestProject by prefix (P<runId>). Successful
-     response contains <boolean>1</boolean> or status:true.
+  A TestLink Test Project carries two identifying strings that behave very
+  differently. The **name** is a mutable label. The **test case prefix** is
+  stamped into the external ID of every test case beneath the project, so it
+  is part of that work's published identity and the API refuses to change it.
+
+  tl.updateTestProject applies a partial update: fields the caller omits keep
+  their existing values. This test renames the project and supplies nothing
+  else, so the notes and prefix appearing unchanged in the read-back is the
+  assertion — not incidental. A full-replace implementation would blank the
+  notes here.
 
   Each helper invocation puts the raw XML response in stderr (where
   expectPatterns matches) and a JSON envelope in stdout. A `{"ok": true,
   "id": N}` stdout means the XML-RPC call returned a value; a `{"ok":
   false, "faultCode": N}` means a fault was returned.
 
-  Silent failures to watch for:
-  - Read step matches the expected name pattern but the response actually
-    contains a *different* project that happens to share part of the
-    name. The expected pattern is the full proj-<testId>-<runId> string,
-    so an exact substring match here is meaningful.
-  - Delete returns true but a stale project with the same prefix from a
-    prior aborted run is what got deleted (the new one persists). With
-    runId in the prefix this is unlikely but worth noting.
-  - Create reports success with no <name>id</name> pair (envelope
-    structure changed) — would fail expectPattern but read carefully.
+  One trap in reading these logs: a lookup that finds nothing does not come
+  back as a fault. TestLink answers tl.getTestProjectByName for a missing
+  project with an ordinary params envelope carrying code 7011 and a message
+  that quotes the name that was asked for. Such a response therefore contains
+  the searched-for name while proving the project is absent, and its stdout
+  still reads {"ok": true}. A genuine hit is recognisable by carrying the
+  project's actual record — its own name, notes and prefix members.
 
 criteria: |
-  PASS when:
-  - Step 1 stdout shows {"ok": true, "id": <number>} and stderr contains
-    <name>id</name>.
-  - Step 2 stderr contains the literal string "proj-{{testId}}-{{runId}}".
-  - Step 3 stderr contains <boolean>1</boolean>.
+  Pass: the project is created and reads back under its original name; the
+  update is acknowledged as operation 'updateTestProject' with a true status;
+  the project then reads back under the renamed title
+  proj-<testId>-<runId>-renamed while still carrying its original notes
+  (<testId>) and its original prefix (P<runId>); and the delete by prefix
+  P<runId> succeeds.
 
-  FAIL on any fault envelope, missing entity ID, name mismatch, or
-  failed deletion.
+  Fail: any fault envelope; a read-back whose notes are empty or missing after
+  the rename, which would mean the update overwrote fields the caller never
+  supplied; a prefix that differs from P<runId>; or a delete that cannot find
+  the project by its original prefix.

@@ -35,6 +35,12 @@ injection vector; the existing passthrough in `createTestProject` survives only
 because serialized integer properties happen to emit no single quotes. New code
 should not inherit that.
 
+The prefix refusal is raised as `NOT_YET_IMPLEMENTED` (50), which reads as
+"later" where this decision means "by design". No existing error code expresses
+"this field is immutable", and adding one was ruled out, so the accurate half of
+the answer lives in the message rather than the code. Worth revisiting if a
+suitable code ever appears.
+
 Because prefix is never changed, the method passes the project's *current* prefix
 to `update()` rather than `null`. That is not decoration: `update()` assigns
 `$tcprefix` only inside the `!is_null($tcasePrefix)` branch but reads it

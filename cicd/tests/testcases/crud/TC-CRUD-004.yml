@@ -1,0 +1,119 @@
+id: TC-CRUD-004
+name: Test project update selects its target by identity, never by payload
+suite: crud
+priority: 4
+timeout: 60000
+dependencies:
+  - TC-AUTH-001
+
+steps:
+  - name: Create first project
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>first-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>F{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+
+  - name: Create second project
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.createTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>second-{{testId}}-{{runId}}</string></value></member>
+        <member><name>testcaseprefix</name><value><string>S{{runId}}</string></value></member>
+        <member><name>notes</name><value><string>{{testId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>id</name>"
+
+  - name: Rename first project to the name the second already holds
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.updateTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>F{{runId}}</string></value></member>
+        <member><name>testprojectname</name><value><string>second-{{testId}}-{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>code</name><value><int>7002</int>"
+
+  - name: Confirm the first project kept its own name and prefix
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.getTestProjectByName</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>testprojectname</name><value><string>first-{{testId}}-{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<name>name</name><value><string>first-{{testId}}-{{runId}}</string>"
+      - "<name>prefix</name><value><string>F{{runId}}</string>"
+
+  - name: Delete second project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>S{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+  - name: Delete first project (teardown)
+    command: |
+      bash cicd/scripts/xmlrpc-capture.sh <<'XMLDOC'
+      <?xml version="1.0"?><methodCall><methodName>tl.deleteTestProject</methodName><params><param><value><struct>
+        <member><name>devKey</name><value><string>{{devKey}}</string></value></member>
+        <member><name>prefix</name><value><string>F{{runId}}</string></value></member>
+      </struct></value></param></params></methodCall>
+      XMLDOC
+    expectPatterns:
+      - "<boolean>1</boolean>|status.*true"
+
+objective: |
+  Verify that tl.updateTestProject decides which project to modify from the
+  identity the caller gave it, and never from the new name in the payload.
+  Guards a regression where an update addressed by prefix was silently applied
+  to whichever project already owned the requested name — the caller was told
+  the operation succeeded, the intended project was left untouched, and an
+  unrelated project was the one that got written to.
+
+judgeContext: |
+  Two projects exist here whose only relationship is that the test asks the
+  first one to take the second one's name. Test Project names are unique in
+  TestLink, so that request must be refused: error code 7002 means a project
+  with the requested name already exists.
+
+  What makes this worth testing is that a project name doubles as a lookup key
+  elsewhere in this API, which is why an update can plausibly confuse the new
+  name with an instruction about which project to act on. The confusion is not
+  visible from a successful-looking response, because renaming the wrongly
+  chosen project to the name it already has changes nothing. Two things
+  together therefore show correct behaviour: the update is refused rather than
+  acknowledged, and the first project still answers to its own name and prefix
+  afterwards.
+
+  Each helper invocation puts the raw XML response in stderr (where
+  expectPatterns matches) and a JSON envelope in stdout. TestLink reports this
+  kind of error inside an ordinary params envelope carrying a code member
+  rather than as an XML-RPC fault, so its stdout still reads {"ok": true}.
+
+criteria: |
+  Pass: both projects are created; the rename attempt is refused with code 7002
+  and a message naming the second project's title; the first project then still
+  reads back under its own name first-<testId>-<runId> carrying prefix
+  F<runId>; and both deletions succeed.
+
+  Fail: the rename attempt is acknowledged as a success instead of refused,
+  which is the regression this test exists to catch; or the first project can
+  no longer be found under its own name, meaning the update reached a project
+  the caller never identified.
