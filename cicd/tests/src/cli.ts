@@ -33,7 +33,11 @@ program
   .option('-s, --suite <suite>', 'Run only tests from this suite')
   .option('-i, --id <id>', 'Run only the test with this ID')
   .option('--dry-run', 'Show what would run without executing', false)
-  .option('--no-llm', 'Skip LLM judging (simple judge only)')
+  // The simple judge is the default. This project's assertions are exact
+  // fragments of deterministic XML-RPC responses, which regex settles better
+  // than semantic review. Opt into the LLM judge per run with --llm.
+  .option('--llm', 'Also run the LLM judge (semantic review)', false)
+  .option('--no-llm', 'Simple judge only — the default; accepted for existing callers')
   .option('--judge-url <url>', 'Ollama URL for LLM judge', CONFIG.llm.defaultUrl)
   .option('--judge-model <model>', 'Model to use for LLM judging', CONFIG.llm.defaultModel)
   .option('-o, --output-dir <dir>', 'Output directory for results')

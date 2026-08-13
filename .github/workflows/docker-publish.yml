@@ -1,97 +1,108 @@
-name: Docker
+name: Docker Publish
 
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-# Manual-only: this workflow publishes to GHCR and requires registry write
-# auth that's not configured on every fork. Trigger from the Actions tab
-# when you actually want to release. Restricted to the main branch via the
-# job's `if:` guard below so accidental dispatches from feature branches
+# Manual-only: publishing pushes a public image, so it happens when someone
+# decides to release, never on a push. Restricted to the main branch via the
+# publish job's `if:` guard so an accidental dispatch from a feature branch
 # can't publish.
 on:
   workflow_dispatch:
-
-env:
-  # Use docker.io for Docker Hub if empty
-  REGISTRY: ghcr.io
-  # github.repository as <account>/<repo>
-  IMAGE_NAME: ${{ github.repository }}
-
+    inputs:
+      version:
+        description: "Release tag to publish, e.g. mcp-1.0.0. Must point at the commit being built."
+        required: true
+        type: string
 
 jobs:
-  build:
+  build-test:
+    name: Build Tests
+    uses: ./.github/workflows/test-suite.yml
+    with:
+      suite: build
+    secrets: inherit
+
+  publish:
+    name: Build & Push Docker Image
+    needs: build-test
     # Guard: only ever publish from the main branch, even when dispatched.
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    # The self-hosted runner is already `docker login`-ed to Docker Hub, so
+    # there is no login step and no registry secrets here.
+    runs-on: self-hosted
     permissions:
       contents: read
-      packages: write
-      # This is used to complete the identity challenge
-      # with sigstore/fulcio when running outside of PRs.
-      id-token: write
 
     steps:
-      - name: Checkout repository
+      # First, and before the checkout: this job depends on the runner already
+      # holding a Docker Hub login, which is ambient machine state no one can
+      # read from here. Establishing that costs a second; discovering it after
+      # a --no-cache --pull build of a php:7.4-apache image does not. The
+      # identity of the runner is printed either way, because "which machine is
+      # this?" is the question that sends people looking in the wrong place.
+      - name: Preflight — runner identity and Docker Hub login
+        run: |
+          set -uo pipefail
+          echo "runner host : $(hostname)"
+          echo "runner user : $(whoami)"
+          echo "runner name : ${RUNNER_NAME:-unknown}"
+          USER_ENTRY=$(docker info 2>/dev/null | sed -n 's/^ *Username: *//p')
+          if [ -z "${USER_ENTRY}" ]; then
+            echo "::error::No Docker Hub login found for user $(whoami) on $(hostname). \
+          Docker credentials are per-user, so a login performed as another account does not \
+          apply here. Either run 'docker login' as this user on this machine, or switch the \
+          workflow to DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets."
+            exit 1
+          fi
+          echo "docker hub  : logged in as ${USER_ENTRY}"
+
+      - name: Checkout
         uses: actions/checkout@v4
-
-      # Install the cosign tool except on PR
-      # https://github.com/sigstore/cosign-installer
-      - name: Install cosign
-        if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 #v3.5.0
         with:
-          cosign-release: 'v2.2.4'
+          # Tags are needed to verify the release tag below; the default
+          # checkout fetches none.
+          fetch-depth: 0
 
-      # Set up BuildKit Docker container builder to be able to build
-      # multi-platform images and export cache
-      # https://github.com/docker/setup-buildx-action
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+      - name: Verify the release tag points at this commit
+        # An image labelled mcp-1.0.0 must contain mcp-1.0.0's code. If main has
+        # moved past the tag, stop rather than publish a mislabelled image.
+        run: |
+          set -euo pipefail
+          VERSION='${{ inputs.version }}'
+          if ! git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
+            echo "::error::Tag ${VERSION} does not exist."
+            exit 1
+          fi
+          TAG_SHA=$(git rev-parse "${VERSION}^{commit}")
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [ "${TAG_SHA}" != "${HEAD_SHA}" ]; then
+            echo "::error::Tag ${VERSION} points at ${TAG_SHA} but HEAD is ${HEAD_SHA}."
+            exit 1
+          fi
+          echo "${VERSION} verified at ${HEAD_SHA}"
 
-      # Login against a Docker registry except on PR
-      # https://github.com/docker/login-action
-      - name: Log into registry ${{ env.REGISTRY }}
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # The git tag, this image's tag, and TL_VERSION_NUMBER are one string.
+          # A release that reports a version it is not cannot be un-published, so
+          # the mismatch has to stop the build rather than be noticed later.
+          if ! grep -q "define('TL_VERSION_NUMBER', '${VERSION}')" cfg/const.inc.php; then
+            echo "::error::TL_VERSION_NUMBER in cfg/const.inc.php does not match ${VERSION}."
+            grep -n "TL_VERSION_NUMBER" cfg/const.inc.php
+            exit 1
+          fi
+          echo "TL_VERSION_NUMBER matches ${VERSION}"
 
-      # Extract metadata (tags, labels) for Docker
-      # https://github.com/docker/metadata-action
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-
-      # Build and push Docker image with Buildx (don't push on PR)
-      # https://github.com/docker/build-push-action
-      - name: Build and push Docker image
-        id: build-and-push
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # Sign the resulting Docker image digest except on PRs.
-      # This will only write to the public Rekor transparency log when the Docker
-      # repository is public to avoid leaking data.  If you would like to publish
-      # transparency data even for private images, pass --force to cosign below.
-      # https://github.com/sigstore/cosign
-      - name: Sign the published Docker image
-        if: ${{ github.event_name != 'pull_request' }}
+      - name: Build and push
         env:
-          # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
-          TAGS: ${{ steps.meta.outputs.tags }}
-          DIGEST: ${{ steps.build-and-push.outputs.digest }}
-        # This step uses the identity token to provision an ephemeral certificate
-        # against the sigstore community Fulcio instance.
-        run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
+          IMAGE: dogkeeper886/testlink-code
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # --no-cache --pull: a release build comes from current source and a
+          # fresh base image, never from layers cached on the persistent runner.
+          docker build --no-cache --pull \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            --label org.opencontainers.image.version="${VERSION}" \
+            --label org.opencontainers.image.base.name=testlink:1.9.20 \
+            -t "${IMAGE}:${VERSION}" \
+            -t "${IMAGE}:latest" \
+            .
+          docker push "${IMAGE}:${VERSION}"
+          docker push "${IMAGE}:latest"

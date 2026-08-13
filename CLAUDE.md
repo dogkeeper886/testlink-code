@@ -51,8 +51,9 @@ To see what skills currently exist here: `ls .claude/skills/`. Each skill's purp
 
 - `bash cicd/scripts/run-tests.sh` runs the full suite. The wrapper brings the stack up, runs the tests, tears down on any exit path.
 - `--suite <name>` filters by suite. The set of valid suite names is the `SUITES` const in `cicd/tests/src/config.ts`. Registering a new suite directory means adding its name there.
-- A test is green only when both the simple judge (pattern match) and the LLM judge (semantic review) agree. A disagreement usually means one of them is wrong — read the reason before deciding which.
-- LLM judge configuration lives in `cicd/tests/.env` (`LLM_JUDGE_URL`, `LLM_JUDGE_MODEL`).
+- **The simple judge runs alone by default**, locally and in CI. This project's assertions are exact fragments of deterministic XML-RPC responses, which regex settles more reliably than semantic review.
+- The LLM judge is opt-in: `--llm` on the CLI, `judge_mode: dual` in the workflows. When it is enabled, a test is green only when both judges agree, and a disagreement means one of them is wrong — read the reason before deciding which.
+- LLM judge configuration lives in `cicd/tests/.env` (`LLM_JUDGE_URL`, `LLM_JUDGE_MODEL`). If that endpoint is unreachable the judge does not fail loudly — see issue #27 — which is part of why it is not the default.
 
 ## The two judges have different jobs — do not make them compete
 

@@ -262,7 +262,7 @@ export interface RunConfig {
  */
 export const DEFAULT_CONFIG: Partial<RunConfig> = {
   dryRun: false,
-  noLlm: false,
+  noLlm: true,
   judgeUrl: 'http://localhost:11434',
   judgeModel: 'gemma3:4b',
   outputFormat: 'console',

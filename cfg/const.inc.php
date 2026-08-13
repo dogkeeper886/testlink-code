@@ -18,9 +18,19 @@
 
 define('TL_SMARTY_VERSION',3);  // @since 1.9.8
 
-/** TestLink Release version (MUST BE changed before the release day) */
-define('TL_VERSION_NUMBER', '1.9.20'); 
-define('TL_VERSION', TL_VERSION_NUMBER . ' [fixed] '); 
+/**
+ * Release version of this distribution (MUST BE changed before the release day).
+ *
+ * One string identifies a release in three places — the git tag, the GitHub
+ * release, the Docker image tag — and this constant is the third. They are kept
+ * literally identical so nothing has to be translated between them;
+ * docker-publish.yml refuses to publish when they disagree.
+ *
+ * The upstream base this is built on is carried in TL_VERSION for humans, since
+ * the version number no longer states it.
+ */
+define('TL_VERSION_NUMBER', 'mcp-1.0.0');
+define('TL_VERSION', TL_VERSION_NUMBER . ' [TestLink 1.9.20] ');
 define('TL_FACE_DIR', 'prague'); 
 
 /** Latest Database version that is used to give users feedback 
