@@ -29,7 +29,7 @@ define('TL_SMARTY_VERSION',3);  // @since 1.9.8
  * The upstream base this is built on is carried in TL_VERSION for humans, since
  * the version number no longer states it.
  */
-define('TL_VERSION_NUMBER', 'mcp-1.0.0');
+define('TL_VERSION_NUMBER', 'mcp-1.0.1');
 define('TL_VERSION', TL_VERSION_NUMBER . ' [TestLink 1.9.20] ');
 define('TL_FACE_DIR', 'prague'); 
 
