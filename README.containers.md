@@ -1,51 +1,141 @@
-# Running TestLink in containers
+# TestLink mcp-1.0.0
 
-`docker-compose.yml` runs TestLink, PostgreSQL and a mail catcher on one machine. A rebuild or recreate of the app container discards everything written inside it, including the database config the install wizard writes. A rebuild after the first install would send you back to the wizard while your data sits in the database.
+TestLink 1.9.20 is an open-source test management system, and its XML-RPC API lets other tools create and run test projects. AI assistants now do that work through MCP servers, which call the same API. Upstream's 1.9.20 code has a typo in the XML-RPC class that breaks every API call with HTTP 500, and the API creates test cases, test suites and builds that only the web UI can delete.
 
-This guide keeps all state outside the container: the database and folders on named volumes, and config files in the repo folder, which the build copies into the image.
+This image runs a fork of TestLink 1.9.20 with the API fixed and ten methods added, ready for the [TestLink MCP server](https://hub.docker.com/r/dogkeeper886/testlink-mcp).
 
-First-time setup is in the [README](README.md#run-it-with-docker). This guide covers what comes after.
+## Quick start
 
-## What runs
+Save this as `docker-compose.yml`:
 
-| Service | Image | Reach it at | Keeps data in |
-|---|---|---|---|
-| `app` | built from `Dockerfile` (PHP 7.4, Apache) | <http://localhost:8090> | volumes `logs`, `upload_area` |
-| `db` | `postgres:9.6` | `db:5432`, inside the stack only | volume `postgres` |
-| `maildev` | `maildev/maildev` | <http://localhost:1080> (inbox), port 1025 (SMTP) | nothing |
-| `restore` | same as `app` | does not start with `up` | see [Sample data](#sample-data) |
+```yaml
+services:
+  db:
+    image: postgres:9.6
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=teste
+      - POSTGRES_PASSWORD=teste
+      - POSTGRES_DB=testlink
+    volumes:
+      - postgres:/var/lib/postgresql/data
 
-The database account is `teste` / `teste`, set in `docker-compose.yml`. Postgres reads it only when it first creates the `postgres` volume, so change it before the first `docker compose up`.
+  app:
+    image: dogkeeper886/testlink-code:latest
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "8090:80"
+    volumes:
+      - logs:/var/testlink/logs
+      - upload_area:/var/testlink/upload_area
 
-## Keep your setup across rebuilds
-
-The image contains a copy of the source code. Code changes appear only after a rebuild:
-
-```bash
-docker compose up -d --build
+volumes:
+  postgres:
+  logs:
+  upload_area:
 ```
 
-The build copies the repo folder into the image, so a config file in the repo folder survives every rebuild. Both config files are git-ignored, so they stay out of commits.
+Then start it:
 
-| File | Written by | Put it in the repo folder with |
-|---|---|---|
-| `config_db.inc.php` | the install wizard | `docker compose cp app:/var/www/html/config_db.inc.php .` |
-| `custom_config.inc.php` | you | see [Turn on email](#turn-on-email) |
+```bash
+docker compose up -d
+```
 
-A rebuilt container opens the install wizard when the repo folder lacks `config_db.inc.php`. **The wizard drops TestLink's tables when it runs again on the same database**, so copy the file out before you rebuild.
+Postgres reads the `teste` / `teste` account only when it first creates the `postgres` volume, so change it before the first start.
+
+**The `mcp-1.0.0` image stops at the install wizard's folder check**, because it predates the fix that makes the log and upload folders writable. Use a later tag, or [build from source](#build-from-source) until Docker Hub has one.
+
+## First install
+
+Open <http://localhost:8090>, choose **New installation**, and enter these values on the database page:
+
+| Field | Value |
+|---|---|
+| Database type | Postgres (9.1 and later) |
+| Database host | `db` |
+| Database name | `testlink` |
+| Database admin login | `teste` |
+| Database admin password | `teste` |
+| TestLink DB login | `testlink` |
+| TestLink DB password | `testlink` |
+
+The TestLink login and password are new, and you can choose your own.
+
+Run the database function the wizard asks for:
+
+```bash
+docker compose exec -T app cat install/sql/postgres/testlink_create_udf0.sql \
+  | docker compose exec -T db psql -U teste -d testlink
+```
+
+Log in as `admin` with password `admin`, and change the password.
+
+## Keep your install across restarts
+
+The wizard writes its database config inside the app container, and a recreated container loses it. **The wizard drops TestLink's tables when it runs again on the same database**, so save the config before you recreate or upgrade the container:
+
+```bash
+docker compose cp app:/var/www/html/config_db.inc.php .
+```
+
+Then mount it under `app` in `docker-compose.yml` and restart:
+
+```yaml
+    volumes:
+      - logs:/var/testlink/logs
+      - upload_area:/var/testlink/upload_area
+      - ./config_db.inc.php:/var/www/html/config_db.inc.php:ro
+```
+
+```bash
+docker compose up -d
+```
+
+## Connect an AI assistant
+
+In TestLink, open **My Settings** (the icon at the top right) and click **Generate a new key** under **API interface**. Then add the MCP server to Claude Code with that key:
+
+```bash
+claude mcp add testlink -- docker run --rm -i --network host \
+  -e TESTLINK_URL=http://localhost:8090 \
+  -e TESTLINK_API_KEY=<your key> \
+  dogkeeper886/testlink-mcp:latest
+```
+
+`--network host` lets the MCP container reach `localhost:8090` on Linux. Drop it on macOS or Windows and use `http://host.docker.internal:8090`. The [testlink-mcp page](https://hub.docker.com/r/dogkeeper886/testlink-mcp) covers other MCP clients and the server's tools.
 
 ## Turn on email
 
-TestLink sends mail for password resets and notifications. The stack's maildev service catches that mail and keeps it away from real inboxes, and TestLink starts sending once you point it at maildev:
+TestLink sends mail for password resets and notifications. A maildev container catches that mail and keeps it away from real inboxes. Save this as `custom_config.inc.php`:
 
-```bash
-sed 's/testlink-maildev/maildev/' docker/custom_config.inc.php > custom_config.inc.php
-docker compose up -d --build
+```php
+<?php
+$g_tl_admin_email = 'admin@example.com';
+$g_from_email = 'testlink@example.com';
+$g_return_path_email = 'no-reply@example.com';
+$g_smtp_host = 'maildev';
+$g_smtp_port = 1025;
 ```
 
-Sent mail appears at <http://localhost:1080>. The `sed` changes the sample file's host name, `testlink-maildev`, to the compose service name, `maildev`.
+Add the maildev service under `services`:
 
-Delete `custom_config.inc.php` and rebuild to turn email off. You can also remove the `maildev` service from `docker-compose.yml`: TestLink uses it only after these steps.
+```yaml
+  maildev:
+    image: maildev/maildev:latest
+    restart: unless-stopped
+    ports:
+      - "1080:1080"
+```
+
+Mount the file in the `app` service's `volumes` list:
+
+```yaml
+      - ./custom_config.inc.php:/var/www/html/custom_config.inc.php:ro
+```
+
+Run `docker compose up -d`, and sent mail appears at <http://localhost:1080>.
 
 ## Logs and uploads
 
@@ -56,43 +146,49 @@ docker compose exec app ls /var/testlink/logs
 docker compose exec app tail -f /var/testlink/logs/userlog0.log
 ```
 
-This stack ignores the repo's own `logs/` and `upload_area/` folders.
+## Build from source
 
-## Use the published image
+The repository's own compose file builds the image and adds maildev:
 
-The release workflow publishes `dogkeeper886/testlink-code` to Docker Hub. To run it instead of building, replace `build: .` under `app` in `docker-compose.yml` and mount your database config into it:
-
-```yaml
-  app: &app
-    image: dogkeeper886/testlink-code:mcp-1.0.0
-    volumes:
-      - logs:/var/testlink/logs
-      - upload_area:/var/testlink/upload_area
-      - ./config_db.inc.php:/var/www/html/config_db.inc.php:ro
+```bash
+git clone https://github.com/dogkeeper886/testlink-code.git
+cd testlink-code
+docker compose up -d --build
 ```
 
-Remove the `config_db.inc.php` line for the first install, then add it back once you have copied the file out.
+The build copies the repo folder into the image, so config files there survive every rebuild, and git ignores both config files.
 
-The `mcp-1.0.0` image predates the fix that makes the log and upload folders writable. TestLink runs on it and loses every log and attachment it tries to write. Build the image locally until Docker Hub has an image from a later commit, which includes the fix.
+Copy the database config out after the first install:
 
-## Sample data
+```bash
+docker compose cp app:/var/www/html/config_db.inc.php .
+```
 
-`docs/db_sample/restore_sample.sh` loads a MySQL dump into a MySQL server. This stack runs PostgreSQL, so the `restore` service stops at its first MySQL command. Create your own test project after logging in instead.
+Turn on email, then rebuild:
+
+```bash
+sed 's/testlink-maildev/maildev/' docker/custom_config.inc.php > custom_config.inc.php
+docker compose up -d --build
+```
+
+The repository's `restore` service loads a MySQL sample dump, so it stops at its first MySQL command on this PostgreSQL stack.
 
 ## Start over
 
 ```bash
 docker compose down -v
 rm -f config_db.inc.php
-docker compose up -d --build
+docker compose up -d
 ```
 
-`down -v` deletes the database, logs and uploads. Then run the install wizard again as in the [README](README.md#run-it-with-docker).
+`down -v` deletes the database, logs and uploads. Then run the [first install](#first-install) again.
 
 ## Security
 
-The base image, `php:7.4-apache`, runs on Debian 11, whose support ended in August 2026. Debian's security repository has removed its packages, so the `Dockerfile` installs from the main repository only, and the image keeps only the fixes that repository carries. PHP 7.4's security support ended in 2022. **Run this stack only on a local machine or a trusted network.**
+The base image, `php:7.4-apache`, runs on Debian 11, whose support ended in August 2026. Debian's security repository has removed its packages, so the image installs from the main repository only, and keeps only the fixes that repository carries. PHP 7.4's security support ended in 2022. **Run this stack only on a local machine or a trusted network.**
 
-## The CI stack
+## Source and support
 
-`cicd/docker-compose.ci.yml` runs a separate stack for the test suite on port 8091. It skips the wizard by mounting a prepared config, seeds a known admin API key, and starts only `app` and `db`. [cicd/TESTING_GUIDELINES.md](cicd/TESTING_GUIDELINES.md) explains why the two stacks stay separate.
+- Source, API reference and issues: [github.com/dogkeeper886/testlink-code](https://github.com/dogkeeper886/testlink-code)
+- MCP server: [dogkeeper886/testlink-mcp](https://hub.docker.com/r/dogkeeper886/testlink-mcp)
+- TestLink uses the GNU GPL license.

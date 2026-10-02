@@ -37,7 +37,7 @@ docker compose cp app:/var/www/html/config_db.inc.php .
 
 Log in as `admin` with password `admin`, and change the password.
 
-[README.containers.md](README.containers.md) covers the stack: rebuilding, mail, the published image and resetting.
+[README.containers.md](README.containers.md), also the Docker Hub description, covers running the published image, keeping the install across restarts, email, logs and starting over.
 
 ## Connect an AI assistant
 
