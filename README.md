@@ -1,869 +1,221 @@
-# IMPORTANT NOTICE
-1.9.20 will be the last version of the 1.9.x family.  
-Next TestLink version will 2.x with a new UX based on the Dashio - Bootstrap Admin Template (https://templatemag.com/dashio-bootstrap-admin-template/)
+# TestLink mcp-1.0.0
 
-# TestLink 1.9.20 Raijin - Enhanced Fork with MCP Support
+TestLink 1.9.20 is an open-source test management system, and its XML-RPC API lets other tools create and run test projects. AI assistants now do that work through MCP servers, which call the same API. Upstream's 1.9.20 code has a typo in the XML-RPC class that breaks every API call with HTTP 500, and the API creates test cases, test suites and builds that only the web UI can delete.
 
-## 🚀 Key Enhancements in This Fork
+This fork fixes the API, adds ten methods, and tests them in CI, so the [TestLink MCP server](https://github.com/dogkeeper886/testlink-mcp) can manage a whole test project.
 
-This is an enhanced fork of TestLink 1.9.20 with critical improvements for modern development workflows:
+## Run it with Docker
 
-### 🔧 **PostgreSQL Database Support**
-- **Migrated from MySQL to PostgreSQL** for better performance and modern database features
-- Updated `docker-compose.yml` to use PostgreSQL 9.6
-- Improved database compatibility and reliability
+The compose stack starts TestLink with PostgreSQL and a mail catcher, and the install wizard creates the database on first visit.
 
-### 🔌 **Model Context Protocol (MCP) Integration**
-- **Fixed and enhanced XML-RPC API** for seamless MCP server integration
-- **Compatible with [TestLink MCP Server](https://github.com/dogkeeper886/testlink-mcp)**
-- Enables AI-powered test case management through Claude Code and other MCP-compatible tools
-- **Critical for modern test automation workflows**
+```bash
+git clone https://github.com/dogkeeper886/testlink-code.git
+cd testlink-code
+docker compose up -d
+```
 
-### 🛠 **XML-RPC API Improvements**
-- Resolved XML-RPC compatibility issues that prevented MCP integration
-- Enhanced API stability and error handling
-- Improved support for external tool integration
+The first run builds the image, which takes a few minutes. Then open <http://localhost:8090>, choose **New installation**, and enter these values on the database page:
 
----
+| Field | Value |
+|---|---|
+| Database type | Postgres (9.1 and later) |
+| Database host | `db` |
+| Database name | `testlink` |
+| Database admin login | `teste` |
+| Database admin password | `teste` |
+| TestLink DB login | `testlink` |
+| TestLink DB password | `testlink` |
 
-# TestLink 1.9.20 Raijin - Read me
+The admin login and password come from `docker-compose.yml`. The TestLink login and password are new, and you can choose your own.
 
-## Contents
- 1. [Introduction](#1-introduction)
- 2. [MCP Integration & AI-Powered Testing](#2-mcp-integration--ai-powered-testing)
- 3. [Release notes / Critical Configuration Notes](#3-release-notes--critical-configuration-notes)
- 4. [System Requirements](#4-system-requirements---server)
- 5. [Installation & SECURITY](#5-installation--security)
- 6. [Upgrade and Migration](#6-upgrade-and-migration)
- 7. [TestLink Team](#7-testlink-team)
- 8. [Bug Reports and Feedback](#8-bug-reports-and-feedback)
- 9. [Supporting our work](#9-supporting-our-work)
-10. [Regarding forum usage](#10-regarding-forum-usage-wwwtestlinkorg) www.testlink.org
-11. [Changes](#11-changes)
-12. [Testlink & FreeTest](#12-testlink--freetest)
-13. [Security](#13-security)
-14. [JIRA DB interface changes](#14-jira-db-interface-changes)
-15. [People/Companies supporting TestLink](#15-peoplecompanies-supporting-testlink)
-16. [Use forum.testlink.org](#16-use-forumtestlinkorg)
-17. [User cries: I WANT HELP !!!](#17-user-cries-i-want-help-)
-18. [Use Mantis documentation](#18-use-mantis-documentation)
-19. [Link to GITORIOUS COMMITS](#19-link-to-gitorious-commits)
-20. [Running Testlink using Docker](./docker/README.md)
+Run the database function the wizard asks for, then save its generated config so a rebuild keeps it:
 
-## 1. Introduction
+```bash
+docker compose exec -T db psql -U teste -d testlink < install/sql/postgres/testlink_create_udf0.sql
+docker compose cp app:/var/www/html/config_db.inc.php .
+```
 
-TestLink is a web based test management and test execution system.
-It enables quality assurance teams to create and manage their test
-cases as well as to organize them into test plans. These test plans
-allow team members to execute test cases and track test results
-dynamically.
+Log in as `admin` with password `admin`, and change the password.
 
-TestLink is a GPL licensed open source project. All of the source code
-behind TestLink is freely available for download via [SourceForge][sou]
-or [GitHub][hub]. If you are interested in contributing to the TestLink
-effort feel free to contact us. There is no hidden fee - 100% free for
-using!
+[README.containers.md](README.containers.md), also the Docker Hub description, covers running the published image, keeping the install across restarts, email, logs and starting over.
 
-**This Enhanced Fork**: This repository contains an enhanced fork of TestLink 1.9.20 specifically designed to support modern AI-powered testing workflows through Model Context Protocol (MCP) integration. It includes critical XML-RPC API fixes and PostgreSQL database support that are essential for MCP compatibility.
+## Connect an AI assistant
 
-In an ideal world, testing would be a pretty straightforward process.
-A test team takes the product requirements, writes a test specification
-document, reviews the tests, and then runs them all for each version of
-the product. The team is composed of full-time staff, and everyone knows
-exactly what is expected of them.
+The TestLink MCP server reaches TestLink through its API, which this fork enables by default.
 
-In practice, few organisations have that luxury. There is not time to run
-all the tests on every product version - especially on fix-releases that
-need to be rolled out quickly. Requirements are constantly changing, and
-the tests have to be changed in step. Test staff come and go. There are
-misunderstandings over who was supposed to run which tests, so some get
-missed. Management suddenly wants a status update at seven in the evening.
+1. In TestLink, open **My Settings** (the icon at the top right) and click **Generate a new key** under **API interface**.
+2. Add the MCP server to Claude Code with that key:
 
-In these situations you need the support of a test management tool, such
-as TestLink. The purpose of TestLink is to answer questions such as:
-
-- For which requirements do we still need to write or update test cases?
-- Which tests do you want me to run for this version?
-- How much progress have we made on testing this release?
-- Which test cases are currently failing, and what are the errors?
-- On which version was this group of test cases last run, and is it time we ran them again?
-- And ultimately: is this version of the product fit for release?
-
-TestLink helps you to keep the test process under control. It forms a
-repository for requirements and test cases, and relates these to builds,
-platforms and staff. You allocate tests to staff who carry them out and
-record the results. A wide variety of reports provide information on what
-has been done and what still needs to be done.
-
-## 2. MCP Integration & AI-Powered Testing
-
-### 🤖 **Model Context Protocol (MCP) Support**
-
-This enhanced fork of TestLink 1.9.20 includes **critical XML-RPC API fixes** that enable seamless integration with modern AI-powered testing tools through the Model Context Protocol (MCP).
-
-#### **Key Benefits:**
-- **AI-Powered Test Management**: Integrate with Claude Code and other MCP-compatible AI tools
-- **Automated Test Case Generation**: Use AI to create, update, and manage test cases
-- **Enhanced Workflow Integration**: Connect TestLink with modern development and testing pipelines
-- **Improved API Reliability**: Fixed XML-RPC compatibility issues for stable MCP integration
-
-#### **TestLink MCP Server Integration**
-
-This fork is specifically designed to work with the [**TestLink MCP Server**](https://github.com/dogkeeper886/testlink-mcp), which provides:
-
-- **22 MCP Tools** for comprehensive test management
-- **Test Case Management**: Create, read, update, delete test cases
-- **Test Suite Operations**: Manage test suites and organize test cases  
-- **Test Plan Management**: Create test plans, assign test cases, manage builds
-- **Test Execution**: Record and track test execution results
-- **Requirement Management**: Read requirements and link to test cases
-
-#### **Quick MCP Setup**
-
-1. **Start this enhanced TestLink instance** (see Installation section)
-2. **Install the TestLink MCP Server**:
    ```bash
-   # For Claude Code
-   claude mcp add testlink -- docker run --rm -i \
-     -e TESTLINK_URL=http://your-testlink-server.com/testlink \
-     -e TESTLINK_API_KEY=your_api_key_here \
+   claude mcp add testlink -- docker run --rm -i --network host \
+     -e TESTLINK_URL=http://localhost:8090 \
+     -e TESTLINK_API_KEY=<your key> \
      dogkeeper886/testlink-mcp:latest
    ```
 
-3. **Generate API Key** in TestLink:
-   - Login to TestLink
-   - Go to "My Settings" 
-   - Click "Generate API Key"
-
-#### **Why This Fork is Critical**
-
-The official TestLink 1.9.20 has XML-RPC API compatibility issues that prevent MCP integration. This fork resolves these issues, making it the **only version** that supports modern AI-powered testing workflows through MCP.
-
-**Without this fork, MCP integration with TestLink is not possible.**
-
-## 3. Release notes / CRITICAL Configuration Notes
-
-This release contains bugfixes and enhancement for 1.9.19
-See CHANGELOG file for detailed list of issues fixed.
-
-Give a look also to:
-https://github.com/TestLinkOpenSourceTRMS/testlink-code/wiki
-https://github.com/TestLinkOpenSourceTRMS/testlink-documentation/wiki
-
-### CRITICAL PHP.INI Settings
-
-#### max_input_vars
-
-**Available since PHP 5.3.9. Default value: 1000**
-
-If you are going to have test plans with more than 100 test cases, it will
-be CRITICAL to increase this value in order to avoid issues such as CRASH
-or MALFUNCTION when adding test cases to test plan.
-
-See [this forum post on max_input_vars][frm] or [this mantis issue][bug] for
-details.
-
-#### memory_limit
-
-**Default value: 128MB**
-
-If you are going to re-import an XML file to update its test case data, the
-system might run out of memory. [The original issue][mem] was resolved with
-a `memory_limit` value of 256MB.
-
-### Oauth configuration
-
-Since 1.9.17 there is new authorization method - using OAuth providers.
-Authentication against multiple oauth providers is supported.
-Currently it configured to work with Google OAuth and Github, but you can add
-any OAuth server that support protocol 2.0 and 2-step authentication.
-
-#### There are some restrictions in using OAuth:
-1. OAuth should not be specified as Default Authentication method
-2. If user does not exist in DB and you try to login through oauth - userID
-will be saved to db with special auth type. And for secure reasons you can't
-logon via regular email/password into Testlink.
-3. If user already exists in DB then you can logon via password or via OAuth
-
-#### To configure OAuth you should set in config provided by OAuth provider
- oauth_client_id - id of OAuth program
- oauth_client_secret - secret code
- oauth_grant_type - authorization_code is default value
- oauth_url - url of OAuth server
- token_url - url for getting token
- oauth_profile - url of OAuth profile page
-
- oauth_grant_type, oauth_scope - specific parameters for several OAuth providers. They are not necessary
-
-### Changes on LDAP CONFIGURATION
-
-Since 1.9.16 authentication against [Multiple LDAP Servers][ldap] is supported.
-To implement this feature configuration parameters have been changed, as explained
-here:
-
-#### TestLink Version < 1.9.16
-
-    $tlCfg->authentication['method'] = 'LDAP';
-
-    $tlCfg->authentication['ldap_server'] = 'ldap.xyz.com';
-    $tlCfg->authentication['ldap_port'] = '389';
-    $tlCfg->authentication['ldap_version'] = '3';
-    $tlCfg->authentication['ldap_root_dn'] = 'dc=xyz,dc=com';
-    $tlCfg->authentication['ldap_bind_dn'] = 'uid=tl,ou=staff,dc=xyz,dc=com';
-    $tlCfg->authentication['ldap_bind_passwd'] = 'XYZw';
-    $tlCfg->authentication['ldap_tls'] = false; // true -> use tls
-
-#### TestLink Version >= 1.9.16
-
-    $tlCfg->authentication['method'] = 'LDAP';
-
-    $tlCfg->authentication['ldap'][1]['ldap_server'] = 'ldap.xyz.com';
-    $tlCfg->authentication['ldap'][1]['ldap_port'] = '389';
-    $tlCfg->authentication['ldap'][1]['ldap_version'] = '3';
-    $tlCfg->authentication['ldap'][1]['ldap_root_dn'] = 'dc=xyz,dc=com';
-    $tlCfg->authentication['ldap'][1]['ldap_bind_dn'] = 'uid=tl,ou=staff,dc=xyz,dc=com';
-    $tlCfg->authentication['ldap'][1]['ldap_bind_passwd'] = 'XYZw';
-    $tlCfg->authentication['ldap'][1]['ldap_tls'] = false;
-
-
-## 3. System Requirements - server
-
-Server environment should consist of:
-- web-server: Apache 2.x
-- PHP > 5.5 It will be better if you use PHP 7.2.x 
-- PHP IMPORTANTE NOTICE: next TestLink Version will require minimum PHP 7.3.x
--       
-- DBMS
-  - **PostgreSQL 9.6+ (Recommended for this fork)**
-  - MySQL 5.7.x
-    - The `log_bin_trust_function_creators` option must be enabled.
-  - MariaDB 10.1.x
-    - The `log_bin_trust_function_creators` option must be enabled.
-  - Postgres 9.x
-  - MS-SQL 201x -> SUPPORT IS INCOMPLETE
-
-Tested on web-browsers:
-- Firefox
-- Chrome
-
-ATTENTION: we have not enough resources to test on all kind of browsers.
-           Right now development is done using Chrome & Firefox.
-
-## 4. Installation & SECURITY
-
-### With containers
-use [README.containers.md](README.containers.md)
-
-**Note**: This fork uses **PostgreSQL** instead of MySQL. The `docker-compose.yml` has been updated to use PostgreSQL 9.6 for better performance and modern database features.
-
-### Without containers
-
-The following details the basic steps for installation on any system.
-Instructions may seem unix-centric but should work on Windows systems.
-
-Barring complications, it should take you about 10-20 minutes
-to install, configure, and start using TestLink.
-
-Short summary:
- 1. Transfer files
- 2. Uncompress files
- 3. Launch web based installer
-
-1. First, transfer the file to your web-server using whatever method
-you like best (ftp, scp, etc).
-
-You will need to telnet/ssh into the server machine for the next steps.
-
-2. Next, untar/gunzip it to the directory that you want.
-
-The usual command is (1 step):
-
-	tar zxvf <filename.tar.gz>
-
-OR  (2 steps):
-
-	gunzip <filename.tar.gz>
-	tar xvf <filename.tar>
-
-Total Commander, Winzip, and other programs should also be able
-to handle decompression of the archive.
-
-At this point you may want to rename the directory to something
-different to 'testlink'.
-
-### SECURITY
-
-You need to configure:
-
-- log directory 	(`$tlCfg->log_path`)
-- upload directory  (`$g_repositoryPath`)
-
-According to your installation, default values provided. However, these are
-examples **THAT DO NOT WORK OUT OF THE BOX**.
-
-Take a look at [bug 5147][5147], [bug 5148][5148], [bug 4977][4977] and
-[bug 4906][4906].
-
-You should also need to configure write access for logging, upload and
-template directories.
-
-
-### SELINUX 
-If you use Linux Operating System, SELINUX can create some issues:  
-
-**ATTENTION with /var/www/html and selinux**  
-https://stackoverflow.com/questions/45311124/directory-is-not-writable-centos7-apache-2-4-6-php-5-4-16  
-
-If SELINUX is enabled you will need to run following command before been able to adjust folder rights   
-*[root@dogbert ~]\# chcon -R -t httpd_sys_rw_content_t /var/www/html/*
-
-You may find more information searching in the Internet:  
-TestLink & SELINUX  
-** FCKEDITOR UPLOAD **
-
-**ATTENTION: We now use CKEDITOR** (see [forum post][cke])
-
-3. Launch web based installer
-We will create the necessary database tables and a basic configuration
-file. From your web server, access http://yoursite/testlink/
-or similar URL and follow instructions.
-
-Check Installation manual and TestLink forum if you meet a problem.
-
-## 5. Upgrade and Migration
-
-When accessing Installer page you will find only the **new installation**
-option. The migration **has to be done manually** for these special cases:
-
-- Upgrade from 1.9.3 to 1.9.4/5/6/7/../16/17/18/19
-- Upgrade from 1.9.4/5 to 1.9.7
-- Upgrade from 1.9.7 to 1.9.8
-- Migration from other releases than 1.9.3
-
-### General Steps
-1. Make a backup of your current database.
-2. Using a **new directory** (**DO NOT OVERWRITE** your old installation),
-   do only following steps from Install procedure:
-       - Transfer files
-       - Uncompress files
- - Copy your old `config_db.inc.php` and `custom_config.inc.php` over to the
-   **new directory**.
- - Launch TestLink
- - TestLink will check the database version. If some upgrade/migration is
-   needed, it will launch automatically the installer.
-
- If you are updating a same major version (for example 1.7.0 to 1.7.1) you
- need to use *Upgrade Database*.
-
-**Please look at [MANTIS 6594][6594]**: Migration scripts don't cover test
-case steps and expected results, also test case ID's are empty in GUI
-
- If you are using a different major version detailed in options, you need
- to use the specific Migrations.
-
- If in some steps TestLink asks you for two databases, **never** use the
- same name for both.
-
- If you find nothing useful, post in the forum.
-
- Always before login, after an upgrade/migration, clear browser cookies.
-
-### Special Cases
-
- 1. Upgrade from 1.9.3 to 1.9.4/5/6/7/../16/17/18/19
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.4/<your_db>/DB.1.5/step1/db_schema_update.sql`
-  b. Execute `install/sql/alter_tables/1.9.4/<your_db>/DB.1.5/stepZ/z_final_step.sql`
-
-then look at sections: 'Upgrade from 1.9.4/5 to 1.9.7',
-                       'Upgrade from 1.9.7 to 1.9.8'
-
-**Hint**: When using MySQL Query Browser make sure you are not using single
-          command execution. (open script or use special script tab to
-          execute the whole script at once)
-
- 2. Upgrade from 1.9.4/5 to 1.9.7
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.6/<your_db>/DB.1.6/step1/db_schema_update.sql`
-  b. Execute `install/sql/alter_tables/1.9.6/<your_db>/DB.1.6/stepZ/z_final_step.sql`
-
-then look at sections: 'Upgrade from 1.9.4/5 to 1.9.7',
-                       'Upgrade from 1.9.7 to 1.9.8',
-                       'Upgrade from 1.9.8 to 1.9.9',
-                       'Upgrade from 1.9.9 to 1.9.10',
-                       'Upgrade from 1.9.10 to 1.9.11',
-                       'Upgrade from 1.9.11 to 1.9.12',
-                       'Upgrade from 1.9.12 to 1.9.13',
-                       'Upgrade from 1.9.13 to 1.9.14',
-                       'Upgrade from 1.9.14 to 1.9.15',
-                       'Upgrade from 1.9.15 to 1.9.16',
-                       'Upgrade from 1.9.16 to 1.9.17'
-                       'Upgrade from 1.9.17 to 1.9.18'
-                       'Upgrade from 1.9.18 to 1.9.19'
-                       'Upgrade from 1.9.19 to 1.9.20'
-
- 3. Upgrade from 1.9.7 to 1.9.8
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.8/<your_db>/DB.1.9.8/step1/db_schema_update.sql`
-  b. Execute `install/sql/alter_tables/1.9.8/<your_db>/DB.1.9.8/stepZ/z_final_step.sql`
-
- 4. Upgrade from 1.9.8 to 1.9.9
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.9/<your_db>/DB.1.9.9/step1/db_schema_update.sql`
-  b. Execute `install/sql/alter_tables/1.9.9/<your_db>/DB.1.9.9/stepZ/z_final_step.sql`
-
- 5. Upgrade from 1.9.9 to 1.9.10
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.10/<your_db>/DB.1.9.10/step1/db_data_update.sql`
-
- 6. Upgrade from 1.9.10 to 1.9.11
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.11/<your_db>/DB.1.9.11/step1/db_schema_update.sql`
-  b. Execute `install/sql/alter_tables/1.9.11/<your_db>/DB.1.9.11/stepZ/z_final_step.sql`
-
- 7. Upgrade from 1.9.11 to 1.9.12
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.12/<your_db>/DB.1.9.12/step1/db_schema_update.sql`
-  b. Execute `install/sql/alter_tables/1.9.12/<your_db>/DB.1.9.12/stepZ/z_final_step.sql`
-
- 8. Upgrade from 1.9.12 to 1.9.13
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.13/<your_db>/DB.1.9.13/step1/db_schema_update.sql`
-  b. Execute `install/sql/alter_tables/1.9.13/<your_db>/DB.1.9.13/stepZ/z_final_step.sql`
-
- 9. Upgrade from 1.9.13 to 1.9.14
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.14/<your_db>/DB.1.9.14/step1/db_schema_update.sql`
-  b. Execute `install/sql/alter_tables/1.9.14/<your_db>/DB.1.9.14/stepZ/z_final_step.sql`
-
-10. Upgrade from 1.9.14 to 1.9.15
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.15/<your_db>/DB.1.9.15/step1/db_schema_update.sql`
-  b. Execute (IF EXISTS) `install/sql/alter_tables/1.9.15/<your_db>/DB.1.9.15/stepZ/z_final_step.sql`
-
-11. Upgrade from 1.9.15 to 1.9.16
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.16/<your_db>/DB.1.9.16/step1/db_schema_update.sql`
-  b. Execute (IF EXISTS) `install/sql/alter_tables/1.9.16/<your_db>/DB.1.9.16/stepZ/z_final_step.sql`
-
-12. Upgrade from 1.9.16 to 1.9.17
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.17/<your_db>/DB.1.9.17/step1/db_schema_update.sql`
-  b. Execute (IF EXISTS) `install/sql/alter_tables/1.9.17/<your_db>/DB.1.9.17/stepZ/z_final_step.sql`
-
-13. Upgrade from 1.9.17 to 1.9.18
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.18/<your_db>/DB.1.9.18/step1/db_schema_update.sql`
-  b. Execute (IF EXISTS) `install/sql/alter_tables/1.9.18/<your_db>/DB.1.9.18/stepZ/z_final_step.sql`
-
-14. Upgrade from 1.9.18 to 1.9.19
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.19/<your_db>/DB.1.9.19/step1/db_schema_update.sql`
-  b. Execute (IF EXISTS) `install/sql/alter_tables/1.9.19/<your_db>/DB.1.9.19/stepZ/z_final_step.sql`
-
-15. Upgrade from 1.9.19 to 1.9.20
-
-WARNING: if you are using a table prefix replace `prefix` with your prefix
-
-  a. Execute `install/sql/alter_tables/1.9.20/<your_db>/DB.1.9.20/step1/db_schema_update.sql`
-  b. Execute (IF EXISTS) `install/sql/alter_tables/1.9.20/<your_db>/DB.1.9.20/stepZ/z_final_step.sql`
-
-
-**Hint**: When using MySQL Query Browser make sure you are not using single
-          command execution. (open script or use special script tab to
-          execute the whole script at once)
-
-**USE THE [FORUM SECTION][upgf] and the [USER UPGRADE SECTION][uupg]**
-
-
-14. Migration from other releases before 1.9.3
-
-You have always have to migrate one by one to each version that is newer
-than yours. Extreme example: migration from 1.7.4
-
-    1.7.4 => 1.7.5 => 1.8.1 => 1.8.2 => 1.8.3 => 1.8.4 => 1.8.5 => 1.9.0
-    1.9.0 => 1.9.1 => 1.9.2 => 1.9.3 => 1.9.4 => 1.9.5 => 1.9.6 => 1.9.7 =>
-    1.9.8 => 1.9.9 => 1.9.10 => 1.9.11 => 1.9.12 => 1.9.13 => 1.9.14 =>
-    1.9.15 => 1.9.16 => 1.9.17 => 1.9.18 => 1.9.19 => 1.9.20
-
-You have to read carefully README and instructions (if any) provided by
-installer. Sometimes version changes do not require actions on DB structure
-or data.
-
-## 6. TestLink Team
-
-This list comprises people who have helped:
-
-### Most Active on this release
-
-  * Francisco Mancardi - Project lead, builds, core developer, contributors
-                         code reviewer (well, really the One Man Band ;) )
-  * Asiel Brumfield - Infrastructure
-
- 
-
-### Contributors and developers active on older releases
-
-  * Maradana Amardeep - Leader of testlink-qa group effort on 1.9.5
-  * Bruno de Paula Kinoshita - some work on API, CSRF, Turn Key Linux
-  * Julian Krien - Leader of testlink-qa group effort on 1.9.1,1.9.2,1.9.3
-  * Andreas Simon
-  * Erik Eloff
-  * Martin Havlat - Project lead, builds, infrastructure, developer
-  * Andreas Morsing - core developer
-  * Amit Khullar
-  * Netzuleando Development OpenSource (netzuleando@gmail.com)
-  
-### TestLink - QA Team - for 1.9.4
-
-  * Romoy Headly - QA Manager
-  * Sujata Verma
-  * Damien Mathieu
-  * Amardeep Maradana
-  * Amit Khullar
-  * Andreas Simon
-  * Ngoc Vu
-  * Biache Benoit
-
-### TestLink - QA - for 1.9 RC1
-
-  * Andreia Balani
-  * Andreas Simon
-  * Biache Benoit
-  * James Bohnert
-  * Micky Zhang
-  * Rocky Yang
-
-  * Masami Ichikawa - Automated Testing
-
-  * Toshiyuki Kawanishi - Japanese localization, developer
-  * Chad Rosen - (Originator - version 1.0.x)
-  * Kevin Levy - Developer
-  * Asiel Brumfield - Infrastructure, developer
-  * Jason B. Archibald - Developer
-
-  * Tools R Us - contributing team
-  * Oscar Castroviejo - trackplus interface
-  * Seweryn Plywaczyk - text area custom field
-  * grdscarabe@grdscarabe.net and Alexandre Da Costa - French localization
-  * Walter Giaquinto/Alessandro Lia	and bruno.busco@gmail.com - Italian localization
-  * Alessandro Lia - Javascript and CSS advice.
-  * Leonardo Molinari - Portuguese (Brazil) localization
-  * Hélio Guilherme - Portuguese localization
-  * jorgesf@jsf.jazztel.es - Spanish localization
-  * Jonas Fleer - search test case by custom field on test projects
-  * Lightbulb Technology Services Pvt. Ltd. - techpartners: import test cases from XLS file
-    abhishek.kulkarni@gmail.com and amit.dixit@lbtp.co.in
-  * Kester Mielke <kmielke@pironet-ndh.com> (execution tree colouring and counters by tc status)
-  * Peter Rooms - Bug coloring and labeling according status using same colors as Mantis.
-  * Eugenia Drosdezki
-      * Move/copy multiple testcases
-      * Access to content of docs folder on combo box
-      * Multiselect OR keywords filter
-  * Japanese Testing Engineer's Forum (TEF) in Japan
-    Working Group of [TestLink Japanese Translation Project][tjp]
-
-    Atsushi Nagata,       AZMA Daisuke,         Hiromi Nishiyama,
-    Kaname Mochizuki,     Kaoru Nakamura,       Kunio Murakami,
-    Lumina Nishihara,     Marino Suda,          Masahide Katsumata,
-    Masami Ichikawa,      Masataka Yoneta,      Sadahiko Hantani,
-    Shinichi Sugiyama,    Shinsuke Matsuki,     Shizuka Ban,
-    Takahiro Wada,        Toshinori Sawaguchi,  Toshiyuki Kawanishi,
-    Yasuhiko Okada,       Yoichi Kunihiro,      Yoshihiro Yoshimura,
-    Yukiko Kajino         Yasuharu Nishi
-
-### Code reuse
-
-We try to follow as much as possible the following principle:
-
-***Do not reinvent the wheel.***
-
-We use code and documentation from other Open Source Systems
-(see `CODE_REUSE` document for details).
-
-
-## 7. Bug Reports and Feedback
-
-You may contact [TestLink User Community Forum][tucf].
-
-If you found this software useful for your company please
-post in forum on section "Companies using TestLink".
-
-To submit a bug or a feature, please use ONLY our [Mantis installation][mbug].
-
-You can follow us on twitter [@TLOpenSource][twt]
-
-## 8. Supporting our work
-
-if you find TestLink useful, think about a donation to support our work.
-
-Contact us at [testlink.forum@gmail.com][gmail]
-
-You can donate using PayPal or Flattr.
-
-## 9. Regarding forum usage www.testlink.org
-
-PLEASE: read these short hints before you write a topic:
-
-  - :!: Use search forum before you add a new question.
-  - :!: Did you search User or Installation manual before?
-  - :!: Don't use the forum as a Bug Tracker, use [Mantis][mbug].
-  **Bug issues reported here will be DELETED**
-  - :!: Consider that some issues are related to Apache, browser or database
-        instead of TestLink. Use Google first.
-
-## 10. Changes (Just a glance)
-
-### This Enhanced Fork (Based on 1.9.20)
-  - **PostgreSQL Database Support**: Migrated from MySQL to PostgreSQL 9.6
-  - **MCP Integration**: Fixed XML-RPC API for Model Context Protocol compatibility
-  - **AI-Powered Testing**: Enables integration with Claude Code and other MCP tools
-  - **Enhanced API Reliability**: Resolved XML-RPC compatibility issues
-  - **Modern Development Workflow**: Support for contemporary testing automation
-
-### 1.9.20 (Original)
-  - DB Schema changes new views, tables.
-  - Platforms can be used during Test Case Design
-  - Security Fixes
-  - MD5 replaced with BCRYPT for DB stored password
-  - Roles issues fixed
-  - new right to allow add/remove keywords from executed test case versions
-  - Heads Ups on execution through use of special Keyword
-  - A couple of new reports
- ... and more (read CHANGELOG file)
-
-
-### 1.9.19
-  - DB Schema changes new unique indexes.
-
-
-### 1.9.18
-  - DB Schema changes to allow fine grain management of different entities.
-  - more features on requirements/test case links
-  - more features on attachments & keywords
-  - more on data management
-    ... and more (read CHANGELOG file)
-
-### 1.9.17
-  - oAuth Authentication with GitHub
-  - code repository integration (to manage external scripts)
-  - more features on requirements
-    ... and more (read CHANGELOG file)
-
-
-### 1.9.16
-  - issues on step are saved on TestLink DB wth step ID
-  - redmine integration: reported will be testlink user creating issue.
-  - ADODB upgraded
-  - Ckeditor upgraded
-    ... and more (read CHANGELOG file)
-
-### 1.9.15
-  - plugin system by Collabnet
-    ... and more (read CHANGELOG file)
-
-### 1.9.14
-  - proxy config available for MANTISSOAP & JIRASOAP Integration
-
-### 1.9.13
-  - new tag to allow inline images in test case summary, preconditions, and steps
-  - new tag to allow inline images in test suite details
-  - new tag to allow inline images in requirement scope
-  - Test Step execution - Attachment management
-  - Automatically copy linked bugs from previous execution to the new one
-  - Export Test Spec - add option to export external ID WITH PREFIX
-  - Improvements on JIRA integration:
-    - user can set values on GUI for Components, Priorities, Versions, IssueTypes
-    - getting domain values from JIRA.
-    ... and more (read CHANGELOG file)
-
-### 1.9.12
-  - Test case relations
-  - Improvements on Issue Tracker integration (edit notes when linking)
-  - Requirements Overview performance improvements
-
-### 1.9.10
-  - Long-awaited feature: execution notes & results for test steps
-
-### 1.9.9
-  - User can have two different (mutually exclusive) kinds of authentication
-
-### 1.9.6
-  - Admin role can not be edit any more
-
-### 1.9.7
-  - Reports do not use Custom fields any more:
-    - `CF_ESTIMATED_EXEC_TIME`
-    - `CF_EXEC_TIME`
-
-   Specific columns have been added to tcversions and executions tables.
-
-  - Smarty 3 is the default.
-
-
-## 11. Testlink & FreeTest
-
-There is a project in Brazil regarding the development of a method/process
-for testing and delivery, focused on providing a method suitable for micro/mini companies.
-
-If you are interested you can [get some info][free]:
-
-[free]: http://www.freetest.net.br
-
-## 12. Security
-
-### 1.9.20
-  - Multiple XSS and Blind SQL Injection
-
-
-### 1.9.15
-  - Multiple XSS and Blind SQL Injection by
-    Netsparker Web Application Security Scanner.
-    They have also provided a free account.
-
-### 1.9.12
-  - Research team of Portcullis Computer Security Ltd
-    cedric (mantis.testlink.org user name)
-
-### 1.9.10
-  - We want to thank xistence (xistence@0x90.nl) for his tests.
-
-## 13. JIRA DB interface changes
-
-  - TICKET 6028: Integration with Jira 6.1 broken.
-    (Due to JIRA schema changes)
-    Contribution by adnkoks
-
-You need to change your xml configuration in TestLink to add a **new MANDATORY
-property**:
-
-    <jiraversion></jiraversion>
-
-Without this property TestLink **WILL CRASH** => this is a desired behaviour
-
-## 14. People/Companies supporting TestLink
-
-  - Bitnami: provided a VM on Cloud to do tests
-
-  - Team Cortado (Germany): paid for custom development of a long-awaited
-    feature: execution notes & results for test steps, **donating** feature
-    to community (it is not the first time they are doing this!)
-
-  - MAMP PRO
-
-  - [Hitek School][hitek]: Group of students helped to test TestLink
-
-  - [Wellington Institute of Technology][welt]: Group of students working on
-    creating automation infrastructure to test TestLink
-
-  - [CSRF Prevention Cheat Sheet][csrf]
-
-## 15. Use forum.testlink.org
-
-Information has been collected with users' help
-
-[FAQ & HINTS][faqh]
-
-[TestLink 1.9.4 and greater, News, changes, etc][194n]
-
-[How to get the answer (self service)][howa]
-
-## 16. User cries: I WANT HELP !!!
-
-Relax, as usual I've to say the resources are limited,
-that this effort is not supported by a company or a foundation
-but is result of usage of free time.
-
-Guidelines for getting help and/or solving a situation are what I use everyday:
-First try for yourself searching on:
-  - mantis.testlink.org
-  - forum.testlink.org
-  - https://github.com/TestLinkOpenSourceTRMS/testlink-documentation/wiki/Execution-Feature---Configuration
-  - https://github.com/TestLinkOpenSourceTRMS/testlink-documentation/wiki/Execution-Feature---Test-Step-Execution-configuration
-
-Please do not operate on lazy mode: just asking.
-First thing will be always asked will be:
-- have you already did some searches ?
-
-When you report a potential issue on a TestLink version,
-first thing that will be requested will be the 30minTest:
-- get latest code from github, do fresh install, retest & provide feedback.
-
-Do not send PRIVATE email to ask for things that have to be PUBLIC, this is
-a bad approach. Use PRIVATE CHANNELS only on Dev Team Request.
-
-If you need more specialized help, it can be provided if you pay for it.
-
-## 17. Use Mantis documentation
-
-[CHANGE LOG][chgl]
-
-[TICKET][7817] with available fixes for latest stable version (1.9.16)
-
-## 18. Link to GITORIOUS COMMITS
-
-Some time ago we **migrated from Gitorious** (thanks a lot for all the years
-of free repo) **to Github**. On tickets or documentation that belong to the
-Gitorious era, you will find **links to commits that are not accessible any
-more as-is**.
-
-But accessing **the same commits in Github** (the commit IDs do not change) is
-just a matter of understanding **how to change the URL Part** that is present
-BEFORE the commit ID. => then Nike => Just DO IT
-
-[sou]: https://sourceforge.net/projects/testlink/
-[hub]: https://github.com/TestLinkOpenSourceTRMS/testlink-code/
-[frm]: http://forum.testlink.org/viewtopic.php?f=11&t=7124&p=17284&sid=e3552aca223ac1f6b3676812aa02f04c#p17284
-[bug]: http://mantis.testlink.org/view.php?id=5372
-[mem]: http://mantis.testlink.org/view.php?id=7178
-[ldap]: http://mantis.testlink.org/view.php?id=2842
-[cke]: http://forum.testlink.org/viewtopic.php?f=22&t=7098&sid=f4012a67d921cf5a2322c52fc38f21d6
-[6594]: http://mantis.testlink.org/view.php?id=6594
-[5147]: http://mantis.testlink.org/view.php?id=5147
-[5148]: http://mantis.testlink.org/view.php?id=5148
-[4977]: http://mantis.testlink.org/view.php?id=4977
-[4906]: http://mantis.testlink.org/view.php?id=4906
-[upgf]: http://forum.testlink.org/viewforum.php?f=11
-[uupg]: http://forum.testlink.org/viewforum.php?f=58
-[tucf]: http://www.testlink.org/
-[mbug]: http://mantis.testlink.org/
-[twt]: http://twitter.com/#!/TLOpenSource
-[free]: http://www.freetest.net.br
-[csrf]: https://www.owasp.org/index.php/Cross-Site_Request_Forgery_(CSRF)_Prevention_Cheat_Sheet
-[hitek]: http://www.hitekschool.com/
-[welt]: www.weltec.ac.nz
-[faqh]: http://forum.testlink.org/viewforum.php?f=14
-[194n]: http://forum.testlink.org/viewforum.php?f=25
-[howa]: http://forum.testlink.org/viewtopic.php?f=50&t=7798
-[chgl]: http://mantis.testlink.org/changelog_page.php
-[7817]: http://mantis.testlink.org/view.php?id=7817
-[gmail]: mailto:testlink.forum@gmail.com
-[tjp]: http://sourceforge.jp/projects/testlinkjp/
+`--network host` lets the MCP container reach `localhost:8090` on Linux. Drop it on macOS or Windows and use `http://host.docker.internal:8090`.
+
+The [testlink-mcp README](https://github.com/dogkeeper886/testlink-mcp#readme) covers other MCP clients and the server's tools.
+
+## API methods this fork adds
+
+Upstream's XML-RPC API already has 89 methods, listed in the next section. This fork adds ten that fill its gaps: deleting test cases, suites, builds and requirements, creating requirements, and updating a test project. All of them live in `lib/api/xmlrpc/v1/xmlrpc.class.php`.
+
+| Purpose | Method |
+|---|---|
+| Delete a test case | `tl.deleteTestCase` |
+| Delete a test suite | `tl.deleteTestSuite` |
+| Delete a build | `tl.deleteBuild` |
+| Remove a test case from a test plan | `tl.removeTestCaseFromTestPlan` |
+| List requirement specifications | `tl.getRequirementSpecificationsForTestProject` |
+| Create a requirement specification | `tl.createRequirementSpecification` |
+| Delete a requirement specification | `tl.deleteRequirementSpecification` |
+| Create a requirement | `tl.createRequirement` |
+| Delete a requirement | `tl.deleteRequirement` |
+| Update a test project | `tl.updateTestProject` |
+
+## API methods TestLink already has
+
+Upstream TestLink 1.9.20 ships these 89 methods. Two pairs are aliases: `tl.ping` for `tl.sayHello`, and `tl.setTestCaseExecutionResult` for `tl.reportTCResult`.
+
+### Server and users
+
+| Purpose | Method |
+|---|---|
+| Check the server is up | `tl.sayHello`, `tl.ping` |
+| Echo a message back | `tl.repeat` |
+| Get the TestLink version | `tl.testLinkVersion` |
+| Get information about the API | `tl.about` |
+| Check an API key | `tl.checkDevKey` |
+| Turn test mode on or off | `tl.setTestMode` |
+| Create a user | `tl.createUser` |
+| Check a user exists | `tl.doesUserExist` |
+| Get a user by ID | `tl.getUserByID` |
+| Get a user by login | `tl.getUserByLogin` |
+| Set a user's role on a test project | `tl.setUserRoleOnProject` |
+
+### Test projects
+
+| Purpose | Method |
+|---|---|
+| List test projects | `tl.getProjects` |
+| Get a test project by name | `tl.getTestProjectByName` |
+| Create a test project | `tl.createTestProject` |
+| Delete a test project | `tl.deleteTestProject` |
+| List a test project's test plans | `tl.getProjectTestPlans` |
+| List a test project's keywords | `tl.getProjectKeywords` |
+| List a test project's platforms | `tl.getProjectPlatforms` |
+| Create a platform | `tl.createPlatform` |
+| Upload a test project attachment | `tl.uploadTestProjectAttachment` |
+| Get an issue tracker | `tl.getIssueTrackerSystem` |
+
+### Test suites
+
+| Purpose | Method |
+|---|---|
+| List top-level test suites | `tl.getFirstLevelTestSuitesForTestProject` |
+| Get a test suite | `tl.getTestSuite` |
+| Get a test suite by ID | `tl.getTestSuiteByID` |
+| List child test suites | `tl.getTestSuitesForTestSuite` |
+| Create a test suite | `tl.createTestSuite` |
+| Update a test suite | `tl.updateTestSuite` |
+| List a test suite's attachments | `tl.getTestSuiteAttachments` |
+| Upload a test suite attachment | `tl.uploadTestSuiteAttachment` |
+| Get a test suite custom field | `tl.getTestSuiteCustomFieldDesignValue` |
+| Update a test suite custom field | `tl.updateTestSuiteCustomFieldDesignValue` |
+
+### Test cases
+
+| Purpose | Method |
+|---|---|
+| Get a test case | `tl.getTestCase` |
+| Find a test case ID by name | `tl.getTestCaseIDByName` |
+| List a test suite's test cases | `tl.getTestCasesForTestSuite` |
+| Create a test case | `tl.createTestCase` |
+| Update a test case | `tl.updateTestCase` |
+| Move a test case to another test suite | `tl.setTestCaseTestSuite` |
+| Set a test case's execution type | `tl.setTestCaseExecutionType` |
+| Create or update test case steps | `tl.createTestCaseSteps` |
+| Delete test case steps | `tl.deleteTestCaseSteps` |
+| List a test case's keywords | `tl.getTestCaseKeywords` |
+| Add keywords to a test case | `tl.addTestCaseKeywords` |
+| Remove keywords from a test case | `tl.removeTestCaseKeywords` |
+| List a test case's attachments | `tl.getTestCaseAttachments` |
+| Upload a test case attachment | `tl.uploadTestCaseAttachment` |
+| List a test case's bugs | `tl.getTestCaseBugs` |
+| List a test case's requirements | `tl.getTestCaseRequirements` |
+| Get an item's full path | `tl.getFullPath` |
+| Get a test case custom field | `tl.getTestCaseCustomFieldDesignValue` |
+| Update a test case custom field | `tl.updateTestCaseCustomFieldDesignValue` |
+
+### Test plans
+
+| Purpose | Method |
+|---|---|
+| Get a test plan by name | `tl.getTestPlanByName` |
+| Create a test plan | `tl.createTestPlan` |
+| Delete a test plan | `tl.deleteTestPlan` |
+| List a test plan's test cases | `tl.getTestCasesForTestPlan` |
+| List a test plan's test suites | `tl.getTestSuitesForTestPlan` |
+| Add a test case to a test plan | `tl.addTestCaseToTestPlan` |
+| List a test plan's platforms | `tl.getTestPlanPlatforms` |
+| Add a platform to a test plan | `tl.addPlatformToTestPlan` |
+| Remove a platform from a test plan | `tl.removePlatformFromTestPlan` |
+| Get a test plan's result totals | `tl.getTotalsForTestPlan` |
+| Get a test plan custom field | `tl.getTestPlanCustomFieldDesignValue` |
+| Get a test case's test plan custom field | `tl.getTestCaseCustomFieldTestPlanDesignValue` |
+
+### Builds
+
+| Purpose | Method |
+|---|---|
+| List a test plan's builds | `tl.getBuildsForTestPlan` |
+| Get a test plan's latest build | `tl.getLatestBuildForTestPlan` |
+| Create a build | `tl.createBuild` |
+| Close a build | `tl.closeBuild` |
+| Update a build's custom fields | `tl.updateBuildCustomFieldsValues` |
+| Count executions by build | `tl.getExecCountersByBuild` |
+
+### Executions
+
+| Purpose | Method |
+|---|---|
+| Record a test result | `tl.reportTCResult`, `tl.setTestCaseExecutionResult` |
+| Get a test case's last result | `tl.getLastExecutionResult` |
+| List a test case's executions | `tl.getExecutionSet` |
+| List all execution results | `tl.getAllExecutionsResults` |
+| Delete an execution | `tl.deleteExecution` |
+| Upload an execution attachment | `tl.uploadExecutionAttachment` |
+| Get an execution custom field | `tl.getTestCaseCustomFieldExecutionValue` |
+| Assign a tester to a test case | `tl.assignTestCaseExecutionTask` |
+| Unassign a tester from a test case | `tl.unassignTestCaseExecutionTask` |
+| Get a test case's assigned tester | `tl.getTestCaseAssignedTester` |
+
+### Requirements
+
+| Purpose | Method |
+|---|---|
+| List a test project's requirements | `tl.getRequirements` |
+| Get a requirement | `tl.getRequirement` |
+| Link requirements to test cases | `tl.assignRequirements` |
+| Get requirement coverage | `tl.getReqCoverage` |
+| Upload a requirement attachment | `tl.uploadRequirementAttachment` |
+| Upload a requirement specification attachment | `tl.uploadRequirementSpecificationAttachment` |
+| Get a requirement custom field | `tl.getRequirementCustomFieldDesignValue` |
+| Get a requirement specification custom field | `tl.getReqSpecCustomFieldDesignValue` |
+
+### Attachments
+
+| Purpose | Method |
+|---|---|
+| Upload an attachment to any item | `tl.uploadAttachment` |
+
+## Contributing
+
+A non-trivial change starts as a GitHub issue paired with a feature request document in [docs/feature-requests/](docs/feature-requests/). [CLAUDE.md](CLAUDE.md) lists the branch, commit and testing conventions, and [CONTEXT.md](CONTEXT.md) defines the terms the code and tests share.
+
+## Upstream TestLink documentation
+
+[README.upstream.md](README.upstream.md) keeps upstream's 1.9.20 README for what this fork leaves unchanged: installing without Docker, PHP settings, LDAP and OAuth, upgrades and security notes. The user and installation manuals are in [docs/](docs/).
+
+TestLink uses the GNU GPL license; see [LICENSE](LICENSE).

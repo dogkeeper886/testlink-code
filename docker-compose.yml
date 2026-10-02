@@ -38,8 +38,8 @@ services:
     ports:
     - "0.0.0.0:8090:80"
     volumes:
-      - ./logs:/var/testlink/logs:Z
-      - ./upload_area:/var/testlink/upload_area:Z
+      - logs:/var/testlink/logs
+      - upload_area:/var/testlink/upload_area
 
   restore:
     <<: *app
@@ -54,3 +54,5 @@ services:
 
 volumes:
   postgres:
+  logs:
+  upload_area:
